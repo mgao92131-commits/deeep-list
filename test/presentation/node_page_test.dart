@@ -112,6 +112,27 @@ void main() {
     expect(mergedField.controller!.selection.baseOffset, 3);
   });
 
+  testWidgets('first node backspace at start is a focused no-op', (
+    tester,
+  ) async {
+    final node = await commands.createNode(parentId: null, content: 'ABC');
+    await pumpApp(tester);
+
+    await tester.tap(find.text('ABC'));
+    await tester.pumpAndSettle();
+    final field = tester.widget<TextField>(find.byType(TextField));
+    field.controller!.selection = const TextSelection.collapsed(offset: 0);
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pumpAndSettle();
+
+    expect((await repository.getNode(node.id))!.content, 'ABC');
+    expect(await repository.getChildren(null), hasLength(1));
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus,
+      isTrue,
+    );
+  });
+
   testWidgets('mobile merge affordance handles backspace at the start', (
     tester,
   ) async {

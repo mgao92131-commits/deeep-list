@@ -165,7 +165,8 @@ class _NodeCardState extends State<NodeCard> {
       final selection = _controller.selection;
       if (selection.isValid &&
           selection.isCollapsed &&
-          selection.baseOffset == 0) {
+          selection.baseOffset == 0 &&
+          widget.canMergeWithPrevious) {
         unawaited(widget.onBackspace(0, _controller.text));
         return KeyEventResult.handled;
       }
