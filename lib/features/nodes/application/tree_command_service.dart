@@ -8,7 +8,7 @@ import '../domain/results/split_result.dart';
 import '../domain/tree_rules.dart';
 
 class TreeCommandService {
-  final NodeRepository _repository;
+  final TreeMutationRepository _repository;
   final Uuid _uuid;
   final DateTime Function() _clock;
 
@@ -309,7 +309,7 @@ class TreeCommandService {
   }
 
   Future<void> _moveNodeInTransaction(
-    NodeRepositoryTransaction transaction, {
+    TreeTransaction transaction, {
     required NodeId nodeId,
     required NodeId? newParentId,
     required int? newPosition,
@@ -353,7 +353,7 @@ class TreeCommandService {
   }
 
   Future<List<NodeId>> _ancestorChain(
-    NodeRepositoryTransaction transaction,
+    TreeTransaction transaction,
     NodeId? start,
   ) async {
     final chain = <NodeId>[];
@@ -379,10 +379,7 @@ class TreeCommandService {
     return chain;
   }
 
-  Future<Node> _requireNode(
-    NodeRepositoryTransaction transaction,
-    NodeId nodeId,
-  ) async {
+  Future<Node> _requireNode(TreeTransaction transaction, NodeId nodeId) async {
     final node = await transaction.getNode(nodeId);
     if (node == null) {
       throw StateError('Node $nodeId does not exist.');
@@ -391,7 +388,7 @@ class TreeCommandService {
   }
 
   Future<void> _deleteSubtree(
-    NodeRepositoryTransaction transaction,
+    TreeTransaction transaction,
     NodeId nodeId,
     Set<NodeId> visited,
   ) async {
@@ -407,7 +404,7 @@ class TreeCommandService {
   }
 
   Future<void> _saveOrdered(
-    NodeRepositoryTransaction transaction,
+    TreeTransaction transaction,
     List<Node> nodes,
   ) async {
     for (var index = 0; index < nodes.length; index++) {

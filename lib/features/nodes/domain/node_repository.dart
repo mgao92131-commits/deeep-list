@@ -1,8 +1,8 @@
 import 'node.dart';
 import 'node_id.dart';
 
-typedef NodeTransactionAction<T> =
-    Future<T> Function(NodeRepositoryTransaction transaction);
+typedef TreeTransactionAction<T> =
+    Future<T> Function(TreeTransaction transaction);
 
 abstract interface class NodeRepository {
   Future<Node?> getNode(NodeId id);
@@ -18,11 +18,18 @@ abstract interface class NodeRepository {
     NodeId? parentId, {
     bool includeArchived = false,
   });
-
-  Future<T> transaction<T>(NodeTransactionAction<T> action);
 }
 
-abstract interface class NodeRepositoryTransaction {
+/// Mutation-only persistence port used by [TreeCommandService].
+///
+/// Presentation and ordinary query code should depend on [NodeRepository]
+/// instead, so parent and position writes remain centralized in the command
+/// service.
+abstract interface class TreeMutationRepository implements NodeRepository {
+  Future<T> transaction<T>(TreeTransactionAction<T> action);
+}
+
+abstract interface class TreeTransaction {
   Future<Node?> getNode(NodeId id);
 
   Future<List<Node>> getChildren(

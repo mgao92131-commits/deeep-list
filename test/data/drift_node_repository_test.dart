@@ -108,28 +108,24 @@ void main() {
   });
 
   test(
-    'malformed cyclic ancestry is detected without looping forever',
+    'database trigger rejects a descendant cycle at the write boundary',
     () async {
       final a = await harness.commands.createNode(parentId: null, content: 'A');
       final b = await harness.commands.createNode(parentId: null, content: 'B');
-      final movable = await harness.commands.createNode(
-        parentId: null,
-        content: 'movable',
-      );
 
       await (harness.database.update(harness.database.nodes)
             ..where((table) => table.id.equals(a.id)))
           .write(db.NodesCompanion(parentId: Value(b.id)));
-      await (harness.database.update(harness.database.nodes)
-            ..where((table) => table.id.equals(b.id)))
-          .write(db.NodesCompanion(parentId: Value(a.id)));
 
       await expectLater(
-        harness.commands
-            .moveNode(nodeId: movable.id, newParentId: a.id, newPosition: 0)
-            .timeout(const Duration(seconds: 1)),
+        (harness.database.update(harness.database.nodes)
+              ..where((table) => table.id.equals(b.id)))
+            .write(db.NodesCompanion(parentId: Value(a.id))),
         throwsA(isA<Exception>()),
       );
+
+      expect((await harness.repository.getNode(a.id))!.parentId, b.id);
+      expect((await harness.repository.getNode(b.id))!.parentId, isNull);
     },
   );
 

@@ -12,9 +12,11 @@ class NodeCard extends StatefulWidget {
   final EditorSession editorSession;
   final VoidCallback onStartEditing;
   final Future<void> Function(String text) onCommit;
+  final ValueChanged<String> onChanged;
   final Future<void> Function(int cursor, String text) onEnter;
   final Future<void> Function(int cursor, String text) onBackspace;
   final Future<void> Function() onNavigate;
+  final bool canMergeWithPrevious;
 
   const NodeCard({
     super.key,
@@ -23,9 +25,11 @@ class NodeCard extends StatefulWidget {
     required this.editorSession,
     required this.onStartEditing,
     required this.onCommit,
+    required this.onChanged,
     required this.onEnter,
     required this.onBackspace,
     required this.onNavigate,
+    required this.canMergeWithPrevious,
   });
 
   @override
@@ -35,11 +39,13 @@ class NodeCard extends StatefulWidget {
 class _NodeCardState extends State<NodeCard> {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
+  bool _atTextStart = false;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.node.content);
+    _controller.addListener(_handleControllerChanged);
     _focusNode = FocusNode(
       debugLabel: 'node-${widget.node.id}',
       onKeyEvent: _handleKeyEvent,
@@ -60,9 +66,18 @@ class _NodeCardState extends State<NodeCard> {
   void _handleFocusChanged() {
     if (_focusNode.hasFocus) {
       widget.editorSession.markActive(widget.node.id);
-    } else if (widget.editorSession.activeNodeId == widget.node.id &&
+    } else if (widget.editorSession.shouldCommitOnBlur(widget.node.id) &&
         _controller.text != widget.node.content) {
       unawaited(widget.onCommit(_controller.text));
+    }
+  }
+
+  void _handleControllerChanged() {
+    final selection = _controller.selection;
+    final atStart =
+        selection.isValid && selection.isCollapsed && selection.baseOffset == 0;
+    if (atStart != _atTextStart && mounted) {
+      setState(() => _atTextStart = atStart);
     }
   }
 
@@ -86,6 +101,7 @@ class _NodeCardState extends State<NodeCard> {
     widget.editorSession.unregister(widget.node.id);
     _focusNode.removeListener(_handleFocusChanged);
     _focusNode.dispose();
+    _controller.removeListener(_handleControllerChanged);
     _controller.dispose();
     super.dispose();
   }
@@ -109,17 +125,25 @@ class _NodeCardState extends State<NodeCard> {
                 focusNode: _focusNode,
                 autofocus: false,
                 textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(hintText: 'Write something…'),
+                decoration: InputDecoration(
+                  hintText: 'Write something…',
+                  suffixIcon: widget.canMergeWithPrevious && _atTextStart
+                      ? IconButton(
+                          tooltip: 'Merge with previous',
+                          icon: const Icon(Icons.keyboard_backspace),
+                          onPressed: () => unawaited(
+                            widget.onBackspace(0, _controller.text),
+                          ),
+                        )
+                      : null,
+                ),
+                onChanged: widget.onChanged,
                 onSubmitted: (value) {
                   final selection = _controller.selection;
                   final rawCursor = selection.isValid
                       ? selection.baseOffset
                       : value.length;
                   final cursor = rawCursor.clamp(0, value.length).toInt();
-                  _controller.value = TextEditingValue(
-                    text: value.substring(0, cursor),
-                    selection: TextSelection.collapsed(offset: cursor),
-                  );
                   unawaited(widget.onEnter(cursor, value));
                 },
               )

@@ -137,7 +137,7 @@ final class TreeCommandServiceProvider
 }
 
 String _$treeCommandServiceHash() =>
-    r'9f7c0d380d55bff72a898832de066fc6bd07424c';
+    r'e917ec9c513633ab69893869d28c125f424bd972';
 
 @ProviderFor(node)
 const nodeProvider = NodeFamily._();

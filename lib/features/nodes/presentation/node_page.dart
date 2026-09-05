@@ -21,14 +21,24 @@ class NodePage extends ConsumerStatefulWidget {
   ConsumerState<NodePage> createState() => _NodePageState();
 }
 
-class _NodePageState extends ConsumerState<NodePage> with RouteAware {
+class _NodePageState extends ConsumerState<NodePage>
+    with RouteAware, WidgetsBindingObserver {
+  static const _autosaveDelay = Duration(milliseconds: 400);
+
   late final EditorSession _editorSession;
+  final _mutationQueue = _MutationQueue();
+  final _structuralCommandsInFlight = <NodeId>{};
+  Timer? _autosaveTimer;
+  NodeId? _pendingAutosaveNodeId;
+  String? _pendingAutosaveText;
+  Future<bool>? _autosaveInFlight;
   bool _routeSubscribed = false;
 
   @override
   void initState() {
     super.initState();
     _editorSession = EditorSession();
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
@@ -59,7 +69,21 @@ class _NodePageState extends ConsumerState<NodePage> with RouteAware {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      // This is best-effort for a process that is killed immediately, while
+      // the debounce below protects ordinary backgrounding and navigation.
+      unawaited(_flushPendingEdit(commitCurrent: true));
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _autosaveTimer?.cancel();
     if (_routeSubscribed) {
       routeObserver.unsubscribe(this);
     }
@@ -67,13 +91,14 @@ class _NodePageState extends ConsumerState<NodePage> with RouteAware {
     super.dispose();
   }
 
-  Future<void> _finishEditingForRouteChange() async {
-    await _editorSession.endEditing();
+  Future<bool> _finishEditingForRouteChange() async {
+    final saved = await _flushPendingEdit(commitCurrent: true);
     if (mounted) {
       ref
           .read(nodePageControllerProvider(widget.parentId).notifier)
           .endEditing();
     }
+    return saved;
   }
 
   Future<void> _startEditing(Node node) async {
@@ -85,48 +110,164 @@ class _NodePageState extends ConsumerState<NodePage> with RouteAware {
     });
   }
 
+  void _scheduleAutosave(NodeId nodeId, String text) {
+    _pendingAutosaveNodeId = nodeId;
+    _pendingAutosaveText = text;
+    _autosaveTimer?.cancel();
+    _autosaveTimer = Timer(_autosaveDelay, _startPendingAutosave);
+  }
+
+  void _startPendingAutosave() {
+    _autosaveTimer = null;
+    final nodeId = _pendingAutosaveNodeId;
+    final text = _pendingAutosaveText;
+    _pendingAutosaveNodeId = null;
+    _pendingAutosaveText = null;
+    if (nodeId == null || text == null) return;
+
+    final save = _saveContent(nodeId, text);
+    _autosaveInFlight = save;
+    unawaited(
+      save.then((_) {
+        if (identical(_autosaveInFlight, save)) {
+          _autosaveInFlight = null;
+        }
+      }),
+    );
+  }
+
+  Future<bool> _saveContent(NodeId nodeId, String text) async {
+    try {
+      final commands = ref.read(treeCommandServiceProvider);
+      await _mutationQueue.add(() => commands.updateContent(nodeId, text));
+      return true;
+    } catch (error) {
+      _showMutationError(error);
+      return false;
+    }
+  }
+
   Future<void> _commit(NodeId nodeId, String text) async {
-    await ref.read(treeCommandServiceProvider).updateContent(nodeId, text);
+    if (_pendingAutosaveNodeId == nodeId) {
+      _autosaveTimer?.cancel();
+      _autosaveTimer = null;
+      _pendingAutosaveNodeId = null;
+      _pendingAutosaveText = null;
+    }
+    await _saveContent(nodeId, text);
+  }
+
+  Future<T?> _runMutation<T>(Future<T> Function() mutation) async {
+    try {
+      return await _mutationQueue.add(mutation);
+    } catch (error) {
+      _showMutationError(error);
+      return null;
+    }
+  }
+
+  Future<void> _drainAutosaveForStructuralCommand() async {
+    _autosaveTimer?.cancel();
+    _autosaveTimer = null;
+    // Enter supplies the complete controller value directly to splitNode. A
+    // pending debounced update must not write a partial value before it.
+    _pendingAutosaveNodeId = null;
+    _pendingAutosaveText = null;
+    final inFlight = _autosaveInFlight;
+    if (inFlight != null) await inFlight;
+    await _mutationQueue.idle;
+  }
+
+  Future<bool> _flushPendingEdit({required bool commitCurrent}) async {
+    _autosaveTimer?.cancel();
+    _autosaveTimer = null;
+    final pendingNodeId = _pendingAutosaveNodeId;
+    final pendingText = _pendingAutosaveText;
+    _pendingAutosaveNodeId = null;
+    _pendingAutosaveText = null;
+
+    var saved = true;
+    if (commitCurrent && pendingNodeId != null && pendingText != null) {
+      if (!await _saveContent(pendingNodeId, pendingText)) saved = false;
+    }
+
+    if (commitCurrent) {
+      final activeNodeId = _editorSession.activeNodeId;
+      final activeText = _editorSession.activeText;
+      final pendingWasActive =
+          pendingNodeId == activeNodeId && pendingText == activeText;
+      if (activeNodeId != null && activeText != null && !pendingWasActive) {
+        if (!await _saveContent(activeNodeId, activeText)) saved = false;
+      }
+    }
+
+    final inFlight = _autosaveInFlight;
+    if (inFlight != null && !await inFlight) saved = false;
+    await _mutationQueue.idle;
+    _editorSession.unfocus();
+    return saved;
   }
 
   Future<void> _handleEnter(Node node, int cursor, String text) async {
-    await _editorSession.commitActive();
-    final result = await ref
-        .read(treeCommandServiceProvider)
-        .splitNode(nodeId: node.id, cursorPosition: cursor, text: text);
-    if (!mounted) return;
+    if (!_structuralCommandsInFlight.add(node.id)) return;
+    _editorSession.suppressBlurCommit(node.id);
+    try {
+      await _drainAutosaveForStructuralCommand();
+      final result = await _runMutation(
+        () => ref
+            .read(treeCommandServiceProvider)
+            .splitNode(nodeId: node.id, cursorPosition: cursor, text: text),
+      );
+      if (result == null) {
+        if (mounted) _scheduleAutosave(node.id, text);
+        return;
+      }
+      if (!mounted) return;
 
-    ref
-        .read(nodePageControllerProvider(widget.parentId).notifier)
-        .startEditing(result.newNodeId);
-    _editorSession.focus(result.newNodeId, cursor: result.cursorPosition);
+      ref
+          .read(nodePageControllerProvider(widget.parentId).notifier)
+          .startEditing(result.newNodeId);
+      _editorSession.focus(result.newNodeId, cursor: result.cursorPosition);
+    } finally {
+      _editorSession.allowBlurCommit(node.id);
+      _structuralCommandsInFlight.remove(node.id);
+    }
   }
 
   Future<void> _handleBackspace(Node node, int cursor, String text) async {
-    await _editorSession.commitActive();
-    final result = await ref
-        .read(treeCommandServiceProvider)
-        .mergeWithPrevious(node.id);
-    if (result == null || !mounted) return;
+    if (!_structuralCommandsInFlight.add(node.id)) return;
+    _editorSession.suppressBlurCommit(node.id);
+    try {
+      if (!await _flushPendingEdit(commitCurrent: true)) return;
+      final result = await _runMutation(
+        () => ref.read(treeCommandServiceProvider).mergeWithPrevious(node.id),
+      );
+      if (result == null || !mounted) return;
 
-    ref
-        .read(nodePageControllerProvider(widget.parentId).notifier)
-        .startEditing(result.targetNodeId);
-    _editorSession.focus(result.targetNodeId, cursor: result.cursorPosition);
+      ref
+          .read(nodePageControllerProvider(widget.parentId).notifier)
+          .startEditing(result.targetNodeId);
+      _editorSession.focus(result.targetNodeId, cursor: result.cursorPosition);
+    } finally {
+      _editorSession.allowBlurCommit(node.id);
+      _structuralCommandsInFlight.remove(node.id);
+    }
   }
 
   Future<void> _openNode(Node node) async {
-    await _finishEditingForRouteChange();
+    if (!await _finishEditingForRouteChange()) return;
     if (!mounted) return;
     context.push('/node/${node.id}');
   }
 
   Future<void> _createNode() async {
-    await _finishEditingForRouteChange();
-    final node = await ref
-        .read(treeCommandServiceProvider)
-        .createNode(parentId: widget.parentId, content: '');
-    if (!mounted) return;
+    if (!await _finishEditingForRouteChange()) return;
+    final node = await _runMutation(
+      () => ref
+          .read(treeCommandServiceProvider)
+          .createNode(parentId: widget.parentId, content: ''),
+    );
+    if (node == null || !mounted) return;
     ref
         .read(nodePageControllerProvider(widget.parentId).notifier)
         .startEditing(node.id);
@@ -134,10 +275,17 @@ class _NodePageState extends ConsumerState<NodePage> with RouteAware {
   }
 
   Future<void> _popPage() async {
-    await _finishEditingForRouteChange();
+    if (!await _finishEditingForRouteChange()) return;
     if (mounted && context.canPop()) {
       context.pop();
     }
+  }
+
+  void _showMutationError(Object error) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not save that change: $error')),
+    );
   }
 
   @override
@@ -149,10 +297,13 @@ class _NodePageState extends ConsumerState<NodePage> with RouteAware {
         : ref.watch(nodeProvider(widget.parentId!)).value;
 
     return PopScope<void>(
-      canPop: widget.parentId == null,
+      // Keep the platform route available for Android predictive back and the
+      // iOS edge-swipe. Autosave/lifecycle flushing is deliberately best-effort
+      // after the platform has accepted the pop.
+      canPop: true,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && widget.parentId != null) {
-          unawaited(_popPage());
+        if (didPop) {
+          unawaited(_flushPendingEdit(commitCurrent: true));
         }
       },
       child: Scaffold(
@@ -175,6 +326,7 @@ class _NodePageState extends ConsumerState<NodePage> with RouteAware {
             editorSession: _editorSession,
             onStartEditing: _startEditing,
             onCommit: _commit,
+            onChanged: (node, text) => _scheduleAutosave(node.id, text),
             onEnter: _handleEnter,
             onBackspace: _handleBackspace,
             onNavigate: _openNode,
@@ -191,4 +343,19 @@ class _NodePageState extends ConsumerState<NodePage> with RouteAware {
       ),
     );
   }
+}
+
+class _MutationQueue {
+  Future<void> _tail = Future<void>.value();
+
+  Future<T> add<T>(Future<T> Function() operation) {
+    final result = _tail.then<T>((_) => operation());
+    _tail = result.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {},
+    );
+    return result;
+  }
+
+  Future<void> get idle => _tail;
 }

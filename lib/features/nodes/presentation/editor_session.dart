@@ -18,10 +18,17 @@ class _EditorRegistration {
 
 class EditorSession {
   final Map<NodeId, _EditorRegistration> _registrations = {};
+  final Set<NodeId> _blurCommitSuppressed = {};
   NodeId? activeNodeId;
   NodeId? _pendingFocusNodeId;
   int? _pendingCursor;
   bool _disposed = false;
+
+  String? get activeText {
+    final nodeId = activeNodeId;
+    if (nodeId == null) return null;
+    return _registrations[nodeId]?.controller.text;
+  }
 
   void register({
     required NodeId nodeId,
@@ -53,6 +60,18 @@ class EditorSession {
     }
   }
 
+  void suppressBlurCommit(NodeId nodeId) {
+    _blurCommitSuppressed.add(nodeId);
+  }
+
+  void allowBlurCommit(NodeId nodeId) {
+    _blurCommitSuppressed.remove(nodeId);
+  }
+
+  bool shouldCommitOnBlur(NodeId nodeId) {
+    return activeNodeId == nodeId && !_blurCommitSuppressed.contains(nodeId);
+  }
+
   Future<void> commitActive() async {
     final nodeId = activeNodeId;
     if (nodeId == null) return;
@@ -75,6 +94,7 @@ class EditorSession {
     activeNodeId = null;
     _pendingFocusNodeId = null;
     _pendingCursor = null;
+    _blurCommitSuppressed.clear();
     for (final registration in _registrations.values) {
       registration.focusNode.unfocus();
     }

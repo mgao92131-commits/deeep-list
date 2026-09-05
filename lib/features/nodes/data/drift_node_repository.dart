@@ -5,7 +5,7 @@ import '../domain/node.dart' as domain;
 import '../domain/node_id.dart';
 import '../domain/node_repository.dart';
 
-class DriftNodeRepository implements NodeRepository {
+class DriftNodeRepository implements TreeMutationRepository {
   final db.AppDatabase database;
 
   DriftNodeRepository(this.database);
@@ -46,7 +46,7 @@ class DriftNodeRepository implements NodeRepository {
   }
 
   @override
-  Future<T> transaction<T>(NodeTransactionAction<T> action) {
+  Future<T> transaction<T>(TreeTransactionAction<T> action) {
     return database.transaction(
       () => action(_DriftNodeRepositoryTransaction(database)),
     );
@@ -93,7 +93,7 @@ class DriftNodeRepository implements NodeRepository {
   }
 }
 
-class _DriftNodeRepositoryTransaction implements NodeRepositoryTransaction {
+class _DriftNodeRepositoryTransaction implements TreeTransaction {
   final db.AppDatabase database;
 
   _DriftNodeRepositoryTransaction(this.database);

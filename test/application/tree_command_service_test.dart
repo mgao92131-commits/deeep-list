@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:deep_list/features/nodes/domain/tree_rules.dart';
+import 'package:deep_list/features/nodes/application/tree_command_service.dart';
 import 'package:deep_list/features/nodes/domain/node.dart';
+import 'package:deep_list/features/nodes/domain/tree_rules.dart';
 
+import '../helpers/memory_node_repository.dart';
 import '../helpers/test_database.dart';
 
 void main() {
@@ -85,6 +87,62 @@ void main() {
     expect((await harness.repository.getNode(b.id))!.parentId, a.id);
     expect((await harness.repository.getNode(c.id))!.parentId, b.id);
   });
+
+  test(
+    'defensive ancestry walk terminates on an already malformed cycle',
+    () async {
+      final repository = MemoryNodeRepository();
+      addTearDown(repository.close);
+      final commands = TreeCommandService(repository);
+      final now = DateTime.utc(2026, 1, 1);
+      final a = Node(
+        id: 'a',
+        parentId: 'b',
+        position: 0,
+        content: 'A',
+        note: null,
+        isDone: false,
+        isFavorite: false,
+        isArchived: false,
+        createdAt: now,
+        updatedAt: now,
+      );
+      final b = Node(
+        id: 'b',
+        parentId: 'a',
+        position: 0,
+        content: 'B',
+        note: null,
+        isDone: false,
+        isFavorite: false,
+        isArchived: false,
+        createdAt: now,
+        updatedAt: now,
+      );
+      final movable = Node(
+        id: 'movable',
+        parentId: null,
+        position: 0,
+        content: 'movable',
+        note: null,
+        isDone: false,
+        isFavorite: false,
+        isArchived: false,
+        createdAt: now,
+        updatedAt: now,
+      );
+      await repository.putUnsafe(a);
+      await repository.putUnsafe(b);
+      await repository.putUnsafe(movable);
+
+      await expectLater(
+        commands
+            .moveNode(nodeId: movable.id, newParentId: a.id, newPosition: 0)
+            .timeout(const Duration(seconds: 1)),
+        throwsA(isA<TreeRuleViolation>()),
+      );
+    },
+  );
 
   test('allows moving to an unrelated parent and to the top level', () async {
     final a = await create('A');

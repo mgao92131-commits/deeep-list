@@ -23,7 +23,11 @@ NodeRepository nodeRepository(Ref ref) {
 
 @Riverpod(keepAlive: true)
 TreeCommandService treeCommandService(Ref ref) {
-  return TreeCommandService(ref.watch(nodeRepositoryProvider));
+  final repository = ref.watch(nodeRepositoryProvider);
+  if (repository is! TreeMutationRepository) {
+    throw StateError('TreeCommandService requires a mutation repository.');
+  }
+  return TreeCommandService(repository);
 }
 
 @riverpod

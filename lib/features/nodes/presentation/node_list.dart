@@ -11,6 +11,7 @@ class NodeList extends StatelessWidget {
   final EditorSession editorSession;
   final Future<void> Function(Node node) onStartEditing;
   final Future<void> Function(NodeId nodeId, String text) onCommit;
+  final void Function(Node node, String text) onChanged;
   final Future<void> Function(Node node, int cursor, String text) onEnter;
   final Future<void> Function(Node node, int cursor, String text) onBackspace;
   final Future<void> Function(Node node) onNavigate;
@@ -22,6 +23,7 @@ class NodeList extends StatelessWidget {
     required this.editorSession,
     required this.onStartEditing,
     required this.onCommit,
+    required this.onChanged,
     required this.onEnter,
     required this.onBackspace,
     required this.onNavigate,
@@ -45,9 +47,11 @@ class NodeList extends StatelessWidget {
           editorSession: editorSession,
           onStartEditing: () => onStartEditing(node),
           onCommit: (text) => onCommit(node.id, text),
+          onChanged: (text) => onChanged(node, text),
           onEnter: (cursor, text) => onEnter(node, cursor, text),
           onBackspace: (cursor, text) => onBackspace(node, cursor, text),
           onNavigate: () => onNavigate(node),
+          canMergeWithPrevious: index > 0,
         );
       },
     );

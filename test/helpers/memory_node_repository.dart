@@ -4,7 +4,7 @@ import 'package:deep_list/features/nodes/domain/node.dart';
 import 'package:deep_list/features/nodes/domain/node_id.dart';
 import 'package:deep_list/features/nodes/domain/node_repository.dart';
 
-class MemoryNodeRepository implements NodeRepository {
+class MemoryNodeRepository implements TreeMutationRepository {
   Map<NodeId, Node> _nodes = {};
   final StreamController<void> _changes = StreamController<void>.broadcast();
 
@@ -37,12 +37,18 @@ class MemoryNodeRepository implements NodeRepository {
   }
 
   @override
-  Future<T> transaction<T>(NodeTransactionAction<T> action) async {
+  Future<T> transaction<T>(TreeTransactionAction<T> action) async {
     final staged = Map<NodeId, Node>.from(_nodes);
     final result = await action(_MemoryTransaction(staged));
     _nodes = staged;
     _changes.add(null);
     return result;
+  }
+
+  /// Seeds malformed state for defensive tree-rule tests only.
+  Future<void> putUnsafe(Node node) async {
+    _nodes[node.id] = node;
+    _changes.add(null);
   }
 
   List<Node> _select(NodeId? parentId, {required bool includeArchived}) {
@@ -64,7 +70,7 @@ class MemoryNodeRepository implements NodeRepository {
   Future<void> close() => _changes.close();
 }
 
-class _MemoryTransaction implements NodeRepositoryTransaction {
+class _MemoryTransaction implements TreeTransaction {
   final Map<NodeId, Node> nodes;
 
   _MemoryTransaction(this.nodes);
