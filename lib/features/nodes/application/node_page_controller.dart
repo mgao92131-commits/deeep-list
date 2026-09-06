@@ -4,24 +4,32 @@ import '../domain/node_id.dart';
 
 part 'node_page_controller.g.dart';
 
+enum PageMode { normal, selected, editing, dragging }
+
 class NodePageState {
-  final NodeId? editingNodeId;
-  final Set<NodeId> selectedNodeIds;
+  final PageMode mode;
+  final NodeId? activeNodeId;
 
-  const NodePageState({
-    this.editingNodeId,
-    this.selectedNodeIds = const <NodeId>{},
-  });
+  const NodePageState({this.mode = PageMode.normal, this.activeNodeId});
 
-  NodePageState copyWith({
-    Object? editingNodeId = _unset,
-    Set<NodeId>? selectedNodeIds,
-  }) {
+  NodeId? get editingNodeId => mode == PageMode.editing ? activeNodeId : null;
+  NodeId? get selectedNodeId => mode == PageMode.selected ? activeNodeId : null;
+  NodeId? get draggingNodeId => mode == PageMode.dragging ? activeNodeId : null;
+
+  bool get isNormal => mode == PageMode.normal;
+  bool isSelected(NodeId id) => mode == PageMode.selected && activeNodeId == id;
+  bool isEditing(NodeId id) => mode == PageMode.editing && activeNodeId == id;
+  bool isDragging(NodeId id) => mode == PageMode.dragging && activeNodeId == id;
+
+  Set<NodeId> get selectedNodeIds =>
+      selectedNodeId != null ? {selectedNodeId!} : const <NodeId>{};
+
+  NodePageState copyWith({PageMode? mode, Object? activeNodeId = _unset}) {
     return NodePageState(
-      editingNodeId: identical(editingNodeId, _unset)
-          ? this.editingNodeId
-          : editingNodeId as NodeId?,
-      selectedNodeIds: selectedNodeIds ?? this.selectedNodeIds,
+      mode: mode ?? this.mode,
+      activeNodeId: identical(activeNodeId, _unset)
+          ? this.activeNodeId
+          : activeNodeId as NodeId?,
     );
   }
 }
@@ -33,19 +41,31 @@ class NodePageController extends _$NodePageController {
   @override
   NodePageState build(NodeId? parentId) => const NodePageState();
 
+  void selectNode(NodeId nodeId) {
+    state = NodePageState(mode: PageMode.selected, activeNodeId: nodeId);
+  }
+
   void startEditing(NodeId nodeId) {
-    state = state.copyWith(editingNodeId: nodeId);
+    state = NodePageState(mode: PageMode.editing, activeNodeId: nodeId);
+  }
+
+  void startDragging(NodeId nodeId) {
+    state = NodePageState(mode: PageMode.dragging, activeNodeId: nodeId);
   }
 
   void endEditing() {
-    state = state.copyWith(editingNodeId: null);
+    state = const NodePageState();
+  }
+
+  void toNormal() {
+    state = const NodePageState();
   }
 
   void toggleSelection(NodeId nodeId) {
-    final selected = {...state.selectedNodeIds};
-    if (!selected.add(nodeId)) {
-      selected.remove(nodeId);
+    if (state.isSelected(nodeId)) {
+      toNormal();
+    } else {
+      selectNode(nodeId);
     }
-    state = state.copyWith(selectedNodeIds: selected);
   }
 }

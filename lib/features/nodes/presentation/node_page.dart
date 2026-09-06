@@ -10,7 +10,11 @@ import '../application/node_page_controller.dart';
 import '../domain/node.dart';
 import '../domain/node_id.dart';
 import 'editor_session.dart';
+import 'models/visible_node_item.dart';
 import 'node_list.dart';
+import 'providers/two_level_nodes_provider.dart';
+import 'widgets/keyboard_toolbar.dart';
+import 'widgets/selection_toolbar.dart';
 
 class NodePage extends ConsumerStatefulWidget {
   final NodeId? parentId;
@@ -64,7 +68,6 @@ class _NodePageState extends ConsumerState<NodePage>
 
   @override
   void didPopNext() {
-    // Returning to a page must not reopen its previous editor or keyboard.
     unawaited(_finishEditingForRouteChange());
   }
 
@@ -74,8 +77,6 @@ class _NodePageState extends ConsumerState<NodePage>
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
-      // This is best-effort for a process that is killed immediately, while
-      // the debounce below protects ordinary backgrounding and navigation.
       unawaited(_flushPendingEdit(commitCurrent: true));
     }
   }
@@ -92,22 +93,82 @@ class _NodePageState extends ConsumerState<NodePage>
   }
 
   Future<bool> _finishEditingForRouteChange() async {
+    final activeId = _editorSession.activeNodeId;
+    final activeText = _editorSession.activeText;
+
+    if (activeId != null && (activeText == null || activeText.trim().isEmpty)) {
+      // Clean up empty transient node on route change
+      await _deleteEmptyNode(activeId);
+      if (mounted) {
+        ref
+            .read(nodePageControllerProvider(widget.parentId).notifier)
+            .toNormal();
+      }
+      return true;
+    }
+
     final saved = await _flushPendingEdit(commitCurrent: true);
     if (mounted) {
-      ref
-          .read(nodePageControllerProvider(widget.parentId).notifier)
-          .endEditing();
+      ref.read(nodePageControllerProvider(widget.parentId).notifier).toNormal();
     }
     return saved;
   }
 
   Future<void> _startEditing(Node node) async {
+    // If currently editing another empty node, clean it up first
+    final currentEditingId = ref
+        .read(nodePageControllerProvider(widget.parentId))
+        .editingNodeId;
+    if (currentEditingId != null && currentEditingId != node.id) {
+      final currentText = _editorSession.activeText;
+      if (currentText == null || currentText.trim().isEmpty) {
+        await _deleteEmptyNode(currentEditingId);
+      } else {
+        await _flushPendingEdit(commitCurrent: true);
+      }
+    }
+
+    if (!mounted) return;
     ref
         .read(nodePageControllerProvider(widget.parentId).notifier)
         .startEditing(node.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _editorSession.focus(node.id, cursor: node.content.length);
     });
+  }
+
+  Future<void> _selectNode(NodeId nodeId) async {
+    final currentEditingId = ref
+        .read(nodePageControllerProvider(widget.parentId))
+        .editingNodeId;
+    if (currentEditingId != null) {
+      final currentText = _editorSession.activeText;
+      if (currentText == null || currentText.trim().isEmpty) {
+        await _deleteEmptyNode(currentEditingId);
+      } else {
+        await _flushPendingEdit(commitCurrent: true);
+      }
+    }
+
+    if (!mounted) return;
+    ref
+        .read(nodePageControllerProvider(widget.parentId).notifier)
+        .selectNode(nodeId);
+  }
+
+  Future<void> _deleteEmptyNode(NodeId nodeId) async {
+    _autosaveTimer?.cancel();
+    _autosaveTimer = null;
+    _pendingAutosaveNodeId = null;
+    _pendingAutosaveText = null;
+    _editorSession.suppressBlurCommit(nodeId);
+    try {
+      await _runMutation(
+        () => ref.read(treeCommandServiceProvider).deleteSubtree(nodeId),
+      );
+    } finally {
+      _editorSession.allowBlurCommit(nodeId);
+    }
   }
 
   void _scheduleAutosave(NodeId nodeId, String text) {
@@ -154,6 +215,18 @@ class _NodePageState extends ConsumerState<NodePage>
       _pendingAutosaveNodeId = null;
       _pendingAutosaveText = null;
     }
+
+    // Spec 13 & 16: If text is empty on commit/blur, remove it
+    if (text.trim().isEmpty) {
+      await _deleteEmptyNode(nodeId);
+      if (mounted) {
+        ref
+            .read(nodePageControllerProvider(widget.parentId).notifier)
+            .toNormal();
+      }
+      return;
+    }
+
     await _saveContent(nodeId, text);
   }
 
@@ -169,8 +242,6 @@ class _NodePageState extends ConsumerState<NodePage>
   Future<void> _drainAutosaveForStructuralCommand() async {
     _autosaveTimer?.cancel();
     _autosaveTimer = null;
-    // Enter supplies the complete controller value directly to splitNode. A
-    // pending debounced update must not write a partial value before it.
     _pendingAutosaveNodeId = null;
     _pendingAutosaveText = null;
     final inFlight = _autosaveInFlight;
@@ -208,11 +279,25 @@ class _NodePageState extends ConsumerState<NodePage>
     return saved;
   }
 
+  // Spec 12 & 14: Enter rules
   Future<void> _handleEnter(Node node, int cursor, String text) async {
     if (!_structuralCommandsInFlight.add(node.id)) return;
     _editorSession.suppressBlurCommit(node.id);
     try {
       await _drainAutosaveForStructuralCommand();
+
+      // Spec 14: Node 为空 -> 删除当前空 Node
+      if (text.trim().isEmpty) {
+        await _deleteEmptyNode(node.id);
+        if (mounted) {
+          ref
+              .read(nodePageControllerProvider(widget.parentId).notifier)
+              .toNormal();
+        }
+        return;
+      }
+
+      // Spec 12: 有内容 -> 创建下一个同级节点 (next sibling)，立即编辑
       final result = await _runMutation(
         () => ref
             .read(treeCommandServiceProvider)
@@ -234,7 +319,7 @@ class _NodePageState extends ConsumerState<NodePage>
     }
   }
 
-  Future<void> _handleBackspace(Node node, int cursor, String text) async {
+  Future<void> _handleBackspaceMerge(Node node, int cursor, String text) async {
     if (!_structuralCommandsInFlight.add(node.id)) return;
     _editorSession.suppressBlurCommit(node.id);
     try {
@@ -254,13 +339,93 @@ class _NodePageState extends ConsumerState<NodePage>
     }
   }
 
-  Future<void> _openNode(Node node) async {
-    if (!await _finishEditingForRouteChange()) return;
-    if (!mounted) return;
-    context.push('/node/${node.id}');
+  // Spec 17: Backspace on empty node -> delete empty node & edit previous
+  Future<void> _handleBackspaceEmpty(
+    Node node,
+    List<VisibleNodeItem> items,
+  ) async {
+    if (!_structuralCommandsInFlight.add(node.id)) return;
+    _editorSession.suppressBlurCommit(node.id);
+    try {
+      final index = items.indexWhere((it) => it.id == node.id);
+      final previousItem = index > 0 ? items[index - 1] : null;
+
+      await _deleteEmptyNode(node.id);
+      if (!mounted) return;
+
+      if (previousItem != null) {
+        ref
+            .read(nodePageControllerProvider(widget.parentId).notifier)
+            .startEditing(previousItem.id);
+        _editorSession.focus(
+          previousItem.id,
+          cursor: previousItem.node.content.length,
+        );
+      } else {
+        ref
+            .read(nodePageControllerProvider(widget.parentId).notifier)
+            .toNormal();
+      }
+    } finally {
+      _editorSession.allowBlurCommit(node.id);
+      _structuralCommandsInFlight.remove(node.id);
+    }
   }
 
-  Future<void> _createNode() async {
+  // Spec 20-22: Swipe Right -> Indent
+  Future<void> _handleIndent(NodeId nodeId, {bool keepEditing = false}) async {
+    await _flushPendingEdit(commitCurrent: true);
+    await _runMutation(
+      () => ref.read(treeCommandServiceProvider).indentNode(nodeId),
+    );
+    if (mounted) {
+      if (keepEditing) {
+        ref
+            .read(nodePageControllerProvider(widget.parentId).notifier)
+            .startEditing(nodeId);
+        _editorSession.focus(nodeId);
+      } else {
+        ref
+            .read(nodePageControllerProvider(widget.parentId).notifier)
+            .toNormal();
+      }
+    }
+  }
+
+  // Spec 23-24: Swipe Left -> Outdent
+  Future<void> _handleOutdent(NodeId nodeId, {bool keepEditing = false}) async {
+    await _flushPendingEdit(commitCurrent: true);
+    await _runMutation(
+      () => ref.read(treeCommandServiceProvider).outdentNode(nodeId),
+    );
+    if (mounted) {
+      if (keepEditing) {
+        ref
+            .read(nodePageControllerProvider(widget.parentId).notifier)
+            .startEditing(nodeId);
+        _editorSession.focus(nodeId);
+      } else {
+        ref
+            .read(nodePageControllerProvider(widget.parentId).notifier)
+            .toNormal();
+      }
+    }
+  }
+
+  // Spec 31-32: Sibling Reorder Only
+  Future<void> _handleReorderSiblings(
+    NodeId? parentId,
+    List<NodeId> orderedIds,
+  ) async {
+    await _runMutation(
+      () => ref
+          .read(treeCommandServiceProvider)
+          .reorderChildren(parentId: parentId, orderedIds: orderedIds),
+    );
+  }
+
+  // Spec 18-19: Blank Area Click -> Create transient empty node
+  Future<void> _createTrailingNode() async {
     if (!await _finishEditingForRouteChange()) return;
     final node = await _runMutation(
       () => ref
@@ -274,10 +439,56 @@ class _NodePageState extends ConsumerState<NodePage>
     _editorSession.focus(node.id, cursor: 0);
   }
 
-  Future<void> _popPage() async {
+  Future<void> _openNode(Node node) async {
     if (!await _finishEditingForRouteChange()) return;
-    if (mounted && context.canPop()) {
-      context.pop();
+    if (!mounted) return;
+    context.push('/node/${node.id}');
+  }
+
+  Future<void> _deleteSelectedNode(NodeId nodeId) async {
+    await _runMutation(
+      () => ref.read(treeCommandServiceProvider).deleteSubtree(nodeId),
+    );
+    if (mounted) {
+      ref.read(nodePageControllerProvider(widget.parentId).notifier).toNormal();
+    }
+  }
+
+  // Spec 35: Back behavior
+  Future<void> _handleBack() async {
+    final pageState = ref.read(nodePageControllerProvider(widget.parentId));
+    final controller = ref.read(
+      nodePageControllerProvider(widget.parentId).notifier,
+    );
+
+    switch (pageState.mode) {
+      case PageMode.editing:
+        final activeId = pageState.editingNodeId;
+        final activeText = _editorSession.activeText;
+        if (activeId != null &&
+            (activeText == null || activeText.trim().isEmpty)) {
+          await _deleteEmptyNode(activeId);
+          controller.toNormal();
+        } else {
+          await _flushPendingEdit(commitCurrent: true);
+          if (activeId != null) {
+            controller.selectNode(activeId);
+          } else {
+            controller.toNormal();
+          }
+        }
+        break;
+      case PageMode.selected:
+        controller.toNormal();
+        break;
+      case PageMode.dragging:
+        controller.toNormal();
+        break;
+      case PageMode.normal:
+        if (mounted && context.canPop()) {
+          context.pop();
+        }
+        break;
     }
   }
 
@@ -290,20 +501,19 @@ class _NodePageState extends ConsumerState<NodePage>
 
   @override
   Widget build(BuildContext context) {
-    final children = ref.watch(childrenProvider(widget.parentId));
+    final visibleNodesAsync = ref.watch(twoLevelNodesProvider(widget.parentId));
     final pageState = ref.watch(nodePageControllerProvider(widget.parentId));
     final parent = widget.parentId == null
         ? null
         : ref.watch(nodeProvider(widget.parentId!)).value;
 
+    final isNormal = pageState.isNormal;
+
     return PopScope<void>(
-      // Keep the platform route available for Android predictive back and the
-      // iOS edge-swipe. Autosave/lifecycle flushing is deliberately best-effort
-      // after the platform has accepted the pop.
-      canPop: true,
+      canPop: isNormal,
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop) {
-          unawaited(_flushPendingEdit(commitCurrent: true));
+        if (!didPop) {
+          unawaited(_handleBack());
         }
       },
       child: Scaffold(
@@ -316,30 +526,132 @@ class _NodePageState extends ConsumerState<NodePage>
               : IconButton(
                   tooltip: 'Back',
                   icon: const Icon(Icons.arrow_back),
-                  onPressed: () => unawaited(_popPage()),
+                  onPressed: () => unawaited(_handleBack()),
                 ),
         ),
-        body: children.when(
-          data: (nodes) => NodeList(
-            nodes: nodes,
-            editingNodeId: pageState.editingNodeId,
-            editorSession: _editorSession,
-            onStartEditing: _startEditing,
-            onCommit: _commit,
-            onChanged: (node, text) => _scheduleAutosave(node.id, text),
-            onEnter: _handleEnter,
-            onBackspace: _handleBackspace,
-            onNavigate: _openNode,
-          ),
+        body: visibleNodesAsync.when(
+          data: (items) {
+            final activeItem = pageState.editingNodeId != null
+                ? items
+                      .where((it) => it.id == pageState.editingNodeId)
+                      .firstOrNull
+                : null;
+
+            return Column(
+              children: [
+                Expanded(
+                  child: NodeList(
+                    items: items,
+                    selectedNodeId: pageState.selectedNodeId,
+                    editingNodeId: pageState.editingNodeId,
+                    editorSession: _editorSession,
+                    onSelect: (id) => unawaited(_selectNode(id)),
+                    onStartEditing: _startEditing,
+                    onCommit: _commit,
+                    onChanged: (node, text) => _scheduleAutosave(node.id, text),
+                    onEnter: _handleEnter,
+                    onBackspaceEmpty: (node) =>
+                        _handleBackspaceEmpty(node, items),
+                    onBackspaceMerge: _handleBackspaceMerge,
+                    onNavigate: _openNode,
+                    onIndent: _handleIndent,
+                    onOutdent: _handleOutdent,
+                    onReorderSiblings: _handleReorderSiblings,
+                    onBlankAreaTap: () => unawaited(_createTrailingNode()),
+                    onDeselect: () {
+                      ref
+                          .read(
+                            nodePageControllerProvider(
+                              widget.parentId,
+                            ).notifier,
+                          )
+                          .toNormal();
+                    },
+                  ),
+                ),
+                // Spec 29: Keyboard Toolbar above keyboard during Editing
+                if (pageState.mode == PageMode.editing && activeItem != null)
+                  KeyboardToolbar(
+                    canOutdent: activeItem.canOutdent,
+                    canIndent: activeItem.canIndent,
+                    onOutdent: () => unawaited(
+                      _handleOutdent(activeItem.id, keepEditing: true),
+                    ),
+                    onIndent: () => unawaited(
+                      _handleIndent(activeItem.id, keepEditing: true),
+                    ),
+                    onDone: () async {
+                      final text =
+                          _editorSession.activeText ?? activeItem.content;
+                      if (text.trim().isEmpty) {
+                        await _deleteEmptyNode(activeItem.id);
+                      } else {
+                        await _commit(activeItem.id, text);
+                      }
+                      _editorSession.unfocus();
+                      if (mounted) {
+                        ref
+                            .read(
+                              nodePageControllerProvider(
+                                widget.parentId,
+                              ).notifier,
+                            )
+                            .toNormal();
+                      }
+                    },
+                  ),
+              ],
+            );
+          },
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, stackTrace) =>
               Center(child: Text('Unable to load nodes: $error')),
         ),
-        floatingActionButton: FloatingActionButton(
-          tooltip: 'Add node',
-          onPressed: () => unawaited(_createNode()),
-          child: const Icon(Icons.add),
-        ),
+        // Spec 33: Selected Bottom Toolbar (Delete, More)
+        floatingActionButton:
+            pageState.mode == PageMode.selected &&
+                pageState.selectedNodeId != null
+            ? SelectionToolbar(
+                onDelete: () =>
+                    unawaited(_deleteSelectedNode(pageState.selectedNodeId!)),
+                onMore: () {
+                  // Lightweight more actions
+                  showModalBottomSheet<void>(
+                    context: context,
+                    builder: (sheetContext) => SafeArea(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ListTile(
+                            leading: const Icon(Icons.archive_outlined),
+                            title: const Text('归档节点'),
+                            onTap: () async {
+                              Navigator.pop(sheetContext);
+                              final id = pageState.selectedNodeId;
+                              if (id != null) {
+                                await ref
+                                    .read(treeCommandServiceProvider)
+                                    .archiveNode(id);
+                                if (mounted) {
+                                  ref
+                                      .read(
+                                        nodePageControllerProvider(
+                                          widget.parentId,
+                                        ).notifier,
+                                      )
+                                      .toNormal();
+                                }
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              )
+            : null,
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       ),
     );
   }

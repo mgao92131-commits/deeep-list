@@ -38,36 +38,86 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('new node enters edit mode with explicit focus', (tester) async {
-    await pumpApp(tester);
-
-    await tester.tap(find.byTooltip('Add node'));
-    await tester.pumpAndSettle();
-
-    final field = tester.widget<TextField>(find.byType(TextField));
-    expect(field.autofocus, isFalse);
-    expect(field.focusNode!.hasFocus, isTrue);
-  });
-
   testWidgets(
-    'Enter splits content and focuses the new sibling at its cursor',
+    'new node is created by tapping trailing blank area and enters editing mode',
     (tester) async {
       await pumpApp(tester);
 
-      await tester.tap(find.byTooltip('Add node'));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), 'HelloWorld');
-      await tester.testTextInput.receiveAction(TextInputAction.next);
+      // Spec 18: Tap trailing blank area to create transient empty node
+      await tester.tap(find.text('点击空白处开始记录'));
       await tester.pumpAndSettle();
 
-      final nodes = await repository.getChildren(null);
-      expect(nodes.map((node) => node.content), ['HelloWorld', '']);
-      expect(find.byType(TextField), findsOneWidget);
-      final newField = tester.widget<TextField>(find.byType(TextField));
-      expect(newField.focusNode!.hasFocus, isTrue);
-      expect(newField.controller!.selection.baseOffset, 0);
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.autofocus, isFalse);
+      expect(field.focusNode!.hasFocus, isTrue);
     },
   );
+
+  testWidgets(
+    'first tap selects node, second tap on text enters editing mode',
+    (tester) async {
+      await commands.createNode(parentId: null, content: 'TestNode');
+      await pumpApp(tester);
+
+      // 1st tap: select
+      await tester.tap(find.text('TestNode'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsNothing);
+      expect(
+        find.byTooltip('Open'),
+        findsOneWidget,
+      ); // Chevron visible in Selected state
+
+      // 2nd tap: edit
+      await tester.tap(find.text('TestNode'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsOneWidget);
+      expect(
+        find.byTooltip('Open'),
+        findsNothing,
+      ); // Chevron hidden in Editing state
+    },
+  );
+
+  testWidgets('Enter on non-empty node creates new sibling and focuses it', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.text('点击空白处开始记录'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'HelloWorld');
+    await tester.testTextInput.receiveAction(TextInputAction.next);
+    await tester.pumpAndSettle();
+
+    final nodes = await repository.getChildren(null);
+    expect(nodes.map((node) => node.content), ['HelloWorld', '']);
+    expect(find.byType(TextField), findsOneWidget);
+    final newField = tester.widget<TextField>(find.byType(TextField));
+    expect(newField.focusNode!.hasFocus, isTrue);
+    expect(newField.controller!.selection.baseOffset, 0);
+  });
+
+  testWidgets('Enter on empty node deletes the empty node', (tester) async {
+    await commands.createNode(parentId: null, content: 'First');
+    await pumpApp(tester);
+
+    // Tap trailing blank area to create transient empty node
+    await tester.tap(find.byKey(const ValueKey('blank-area')));
+    await tester.pumpAndSettle();
+    expect(await repository.getChildren(null), hasLength(2));
+
+    // Press enter on empty node
+    await tester.testTextInput.receiveAction(TextInputAction.next);
+    await tester.pumpAndSettle();
+
+    // Empty node should be deleted
+    final nodes = await repository.getChildren(null);
+    expect(nodes.map((n) => n.content), ['First']);
+    expect(find.byType(TextField), findsNothing);
+  });
 
   testWidgets('Enter splits a middle cursor without losing the suffix', (
     tester,
@@ -75,8 +125,12 @@ void main() {
     await commands.createNode(parentId: null, content: 'HelloWorld');
     await pumpApp(tester);
 
+    // Double tap to edit
     await tester.tap(find.text('HelloWorld'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('HelloWorld'));
+    await tester.pumpAndSettle();
+
     final field = tester.widget<TextField>(find.byType(TextField));
     field.controller!.selection = const TextSelection.collapsed(offset: 5);
     await tester.testTextInput.receiveAction(TextInputAction.next);
@@ -91,67 +145,25 @@ void main() {
     expect(newField.controller!.selection.baseOffset, 0);
   });
 
-  testWidgets('Backspace at the start merges and focuses the previous node', (
+  testWidgets('Backspace on empty node deletes it and focuses previous node', (
     tester,
   ) async {
-    final first = await commands.createNode(parentId: null, content: 'ABC');
-    await commands.createNode(parentId: null, content: 'DEF');
+    final first = await commands.createNode(parentId: null, content: 'First');
     await pumpApp(tester);
 
-    await tester.tap(find.text('DEF'));
+    // Create empty trailing node
+    await tester.tap(find.byKey(const ValueKey('blank-area')));
     await tester.pumpAndSettle();
-    final field = tester.widget<TextField>(find.byType(TextField));
-    field.controller!.selection = const TextSelection.collapsed(offset: 0);
+    expect(await repository.getChildren(null), hasLength(2));
+
+    // Press backspace on empty node
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
     await tester.pumpAndSettle();
 
-    expect((await repository.getNode(first.id))!.content, 'ABCDEF');
+    // Empty node deleted, previous node focused
     expect(await repository.getChildren(null), hasLength(1));
-    final mergedField = tester.widget<TextField>(find.byType(TextField));
-    expect(mergedField.focusNode!.hasFocus, isTrue);
-    expect(mergedField.controller!.selection.baseOffset, 3);
-  });
-
-  testWidgets('first node backspace at start is a focused no-op', (
-    tester,
-  ) async {
-    final node = await commands.createNode(parentId: null, content: 'ABC');
-    await pumpApp(tester);
-
-    await tester.tap(find.text('ABC'));
-    await tester.pumpAndSettle();
-    final field = tester.widget<TextField>(find.byType(TextField));
-    field.controller!.selection = const TextSelection.collapsed(offset: 0);
-    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
-    await tester.pumpAndSettle();
-
-    expect((await repository.getNode(node.id))!.content, 'ABC');
-    expect(await repository.getChildren(null), hasLength(1));
-    expect(
-      tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus,
-      isTrue,
-    );
-  });
-
-  testWidgets('mobile merge affordance handles backspace at the start', (
-    tester,
-  ) async {
-    final first = await commands.createNode(parentId: null, content: 'ABC');
-    await commands.createNode(parentId: null, content: 'DEF');
-    await pumpApp(tester);
-
-    await tester.tap(find.text('DEF'));
-    await tester.pumpAndSettle();
-    final field = tester.widget<TextField>(find.byType(TextField));
-    field.controller!.selection = const TextSelection.collapsed(offset: 0);
-    await tester.pump();
-
-    expect(find.byTooltip('Merge with previous'), findsOneWidget);
-    await tester.tap(find.byTooltip('Merge with previous'));
-    await tester.pumpAndSettle();
-
-    expect((await repository.getNode(first.id))!.content, 'ABCDEF');
-    expect(await repository.getChildren(null), hasLength(1));
+    expect((await repository.getChildren(null)).single.id, first.id);
+    expect(find.byType(TextField), findsOneWidget);
   });
 
   testWidgets('debounced autosave persists text before navigation', (
@@ -162,6 +174,9 @@ void main() {
 
     await tester.tap(find.text('Before'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Before'));
+    await tester.pumpAndSettle();
+
     await tester.enterText(find.byType(TextField), 'Autosaved');
     await tester.pump(const Duration(milliseconds: 450));
     await tester.pumpAndSettle();
@@ -175,6 +190,9 @@ void main() {
 
     await tester.tap(find.text('Before'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Before'));
+    await tester.pumpAndSettle();
+
     await tester.enterText(find.byType(TextField), 'Flushed');
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pumpAndSettle();
@@ -193,6 +211,9 @@ void main() {
 
       await tester.tap(find.text('Parent'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Parent'));
+      await tester.pumpAndSettle();
+
       expect(find.byType(TextField), findsOneWidget);
       final oldFocusNode = tester
           .widget<TextField>(find.byType(TextField))
@@ -200,8 +221,16 @@ void main() {
       expect(oldFocusNode.hasFocus, isTrue);
       await tester.enterText(find.byType(TextField), 'Edited Parent');
 
+      // Tap outside to commit and select
+      await tester.tap(find.byKey(const ValueKey('blank-area')));
+      await tester.pumpAndSettle();
+
+      // Now selected, Chevron is visible
+      await tester.tap(find.text('Edited Parent'));
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Open'));
       await tester.pumpAndSettle();
+
       expect(find.text('Edited Parent'), findsOneWidget);
       expect(
         (await repository.getChildren(null)).single.content,
@@ -216,4 +245,38 @@ void main() {
       expect(oldFocusNode.hasFocus, isFalse);
     },
   );
+
+  testWidgets(
+    'displays exactly two levels (Level 1 + Level 2) and hides Level 3',
+    (tester) async {
+      final l1 = await commands.createNode(parentId: null, content: 'L1-Node');
+      final l2 = await commands.createNode(parentId: l1.id, content: 'L2-Node');
+      await commands.createNode(parentId: l2.id, content: 'L3-Node');
+      await pumpApp(tester);
+
+      expect(find.text('L1-Node'), findsOneWidget);
+      expect(find.text('L2-Node'), findsOneWidget);
+      // L3 must NOT be visible on this page! (Spec 2)
+      expect(find.text('L3-Node'), findsNothing);
+    },
+  );
+
+  testWidgets('Selected Bottom Toolbar allows deleting selected node', (
+    tester,
+  ) async {
+    await commands.createNode(parentId: null, content: 'ToDelete');
+    await pumpApp(tester);
+
+    // Tap to select
+    await tester.tap(find.text('ToDelete'));
+    await tester.pumpAndSettle();
+
+    // Selection toolbar is shown with delete button
+    expect(find.text('删除'), findsOneWidget);
+    await tester.tap(find.text('删除'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ToDelete'), findsNothing);
+    expect(await repository.getChildren(null), isEmpty);
+  });
 }
