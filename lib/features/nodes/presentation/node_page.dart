@@ -348,22 +348,23 @@ class _NodePageState extends ConsumerState<NodePage>
         return;
       }
 
-      // Spec 12: 有内容 -> 创建下一个同级节点 (next sibling)，立即编辑
-      final result = await _runMutation(
+      // 非空节点按 Enter: 保存当前完整文本，在正下方创建空同级节点，焦点进入新节点
+      await _saveContent(node.id, text);
+      final newNode = await _runMutation(
         () => ref
             .read(treeCommandServiceProvider)
-            .splitNode(nodeId: node.id, cursorPosition: cursor, text: text),
+            .createNode(
+              parentId: node.parentId,
+              content: '',
+              position: node.position + 1,
+            ),
       );
-      if (result == null) {
-        if (mounted) _scheduleAutosave(node.id, text);
-        return;
-      }
-      if (!mounted) return;
+      if (newNode == null || !mounted) return;
 
       ref
           .read(nodePageControllerProvider(widget.parentId).notifier)
-          .startEditing(result.newNodeId);
-      _editorSession.focus(result.newNodeId, cursor: result.cursorPosition);
+          .startEditing(newNode.id);
+      _editorSession.focus(newNode.id, cursor: 0);
     } finally {
       _editorSession.allowBlurCommit(node.id);
       _structuralCommandsInFlight.remove(node.id);

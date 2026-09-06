@@ -264,7 +264,7 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
         : (44.0 - horizontalMargin);
 
     final textStyle = (theme.textTheme.bodyLarge ?? const TextStyle()).copyWith(
-      fontSize: 17,
+      fontSize: 16,
       height: 1.3,
       color: widget.item.isDone
           ? theme.colorScheme.onSurfaceVariant
@@ -282,7 +282,8 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
         controller: _controller,
         focusNode: _focusNode,
         autofocus: false,
-        maxLines: 1,
+        minLines: 1,
+        maxLines: null,
         textInputAction: TextInputAction.next,
         style: textStyle,
         decoration: InputDecoration(
@@ -308,8 +309,6 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
                 ),
               )
             : textStyle,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
       );
     }
 
@@ -387,7 +386,6 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
                             onTap: () => unawaited(widget.onNavigate()),
                             child: Container(
                               width: 48,
-                              height: minHeight,
                               alignment: Alignment.centerRight,
                               padding: const EdgeInsets.only(right: 6),
                               child: const Icon(Icons.chevron_right, size: 20),

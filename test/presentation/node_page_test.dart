@@ -119,31 +119,86 @@ void main() {
     expect(find.byType(TextField), findsNothing);
   });
 
-  testWidgets('Enter splits a middle cursor without losing the suffix', (
-    tester,
-  ) async {
-    await commands.createNode(parentId: null, content: 'HelloWorld');
-    await pumpApp(tester);
+  testWidgets(
+    'Enter on non-empty node preserves full text and creates empty node below (middle cursor)',
+    (tester) async {
+      await commands.createNode(parentId: null, content: 'HelloWorld');
+      await pumpApp(tester);
 
-    // Double tap to edit
-    await tester.tap(find.text('HelloWorld'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('HelloWorld'));
-    await tester.pumpAndSettle();
+      // Double tap to edit
+      await tester.tap(find.text('HelloWorld'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('HelloWorld'));
+      await tester.pumpAndSettle();
 
-    final field = tester.widget<TextField>(find.byType(TextField));
-    field.controller!.selection = const TextSelection.collapsed(offset: 5);
-    await tester.testTextInput.receiveAction(TextInputAction.next);
-    await tester.pumpAndSettle();
+      final field = tester.widget<TextField>(find.byType(TextField));
+      field.controller!.selection = const TextSelection.collapsed(offset: 5);
+      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.pumpAndSettle();
 
-    expect((await repository.getChildren(null)).map((node) => node.content), [
-      'Hello',
-      'World',
-    ]);
-    final newField = tester.widget<TextField>(find.byType(TextField));
-    expect(newField.focusNode!.hasFocus, isTrue);
-    expect(newField.controller!.selection.baseOffset, 0);
-  });
+      expect((await repository.getChildren(null)).map((node) => node.content), [
+        'HelloWorld',
+        '',
+      ]);
+      final newField = tester.widget<TextField>(find.byType(TextField));
+      expect(newField.focusNode!.hasFocus, isTrue);
+      expect(newField.controller!.selection.baseOffset, 0);
+    },
+  );
+
+  testWidgets(
+    'Enter on non-empty node preserves full text and creates empty node below (start cursor)',
+    (tester) async {
+      await commands.createNode(parentId: null, content: 'HelloWorld');
+      await pumpApp(tester);
+
+      // Double tap to edit
+      await tester.tap(find.text('HelloWorld'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('HelloWorld'));
+      await tester.pumpAndSettle();
+
+      final field = tester.widget<TextField>(find.byType(TextField));
+      field.controller!.selection = const TextSelection.collapsed(offset: 0);
+      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.pumpAndSettle();
+
+      expect((await repository.getChildren(null)).map((node) => node.content), [
+        'HelloWorld',
+        '',
+      ]);
+      final newField = tester.widget<TextField>(find.byType(TextField));
+      expect(newField.focusNode!.hasFocus, isTrue);
+      expect(newField.controller!.selection.baseOffset, 0);
+    },
+  );
+
+  testWidgets(
+    'Enter on non-empty node preserves full text and creates empty node below (end cursor)',
+    (tester) async {
+      await commands.createNode(parentId: null, content: 'HelloWorld');
+      await pumpApp(tester);
+
+      // Double tap to edit
+      await tester.tap(find.text('HelloWorld'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('HelloWorld'));
+      await tester.pumpAndSettle();
+
+      final field = tester.widget<TextField>(find.byType(TextField));
+      field.controller!.selection = const TextSelection.collapsed(offset: 10);
+      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.pumpAndSettle();
+
+      expect((await repository.getChildren(null)).map((node) => node.content), [
+        'HelloWorld',
+        '',
+      ]);
+      final newField = tester.widget<TextField>(find.byType(TextField));
+      expect(newField.focusNode!.hasFocus, isTrue);
+      expect(newField.controller!.selection.baseOffset, 0);
+    },
+  );
 
   testWidgets('Backspace on empty node deletes it and focuses previous node', (
     tester,

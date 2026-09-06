@@ -644,4 +644,34 @@ void main() {
       expect(find.byType(TextField), findsNothing);
     },
   );
+
+  testWidgets(
+    'Node displays at 16sp font and allows full multiline text wrapping in normal and editing modes',
+    (tester) async {
+      await commands.createNode(
+        parentId: null,
+        content: '这是一段很长的文本，用来测试在普通态和编辑态下是否都会自动折行显示，而不会被截断为单行。',
+      );
+      await pumpApp(tester);
+
+      // Verify normal display text: 16sp, no maxLines (multiline), no overflow ellipsis
+      final textFinder = find.byType(Text);
+      final textWidget = tester.widget<Text>(textFinder.first);
+      expect(textWidget.style?.fontSize, 16);
+      expect(textWidget.maxLines, isNull);
+      expect(textWidget.overflow, isNull);
+
+      // Enter editing mode (tap once to select, second tap to edit)
+      await tester.tap(textFinder.first);
+      await tester.pumpAndSettle();
+      await tester.tap(textFinder.first);
+      await tester.pumpAndSettle();
+
+      // Verify editing mode TextField: 16sp, minLines 1, maxLines null (multiline)
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      expect(textField.style?.fontSize, 16);
+      expect(textField.minLines, 1);
+      expect(textField.maxLines, isNull);
+    },
+  );
 }
