@@ -253,15 +253,9 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // Spec 36:
-    // Level 1: font 17sp, min height 54dp, left margin 20dp, right margin 14dp
-    // Level 2: font 17sp, min height 52dp, left margin 44dp, right margin 14dp
-    final isL1 = widget.item.level == 1;
-    final minHeight = isL1 ? 54.0 : 52.0;
+    const minHeight = 54.0;
     const horizontalMargin = 8.0;
-    final innerLeftPadding = isL1
-        ? (20.0 - horizontalMargin)
-        : (44.0 - horizontalMargin);
+    const innerLeftPadding = 20.0 - horizontalMargin;
 
     final textStyle = (theme.textTheme.bodyLarge ?? const TextStyle()).copyWith(
       fontSize: 16,
@@ -319,7 +313,7 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
         ? 40.0
         : (14.0 - horizontalMargin);
 
-    final dividerIndent = isL1 ? 20.0 : 44.0;
+    const dividerIndent = 20.0;
 
     return SizedBox(
       width: double.infinity,

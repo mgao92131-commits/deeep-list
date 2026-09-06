@@ -10,7 +10,7 @@ import '../application/node_page_controller.dart';
 import '../domain/node.dart';
 import '../domain/node_id.dart';
 import 'editor_session.dart';
-import 'models/two_level_tree.dart';
+import 'models/visible_node_item.dart';
 import 'node_list.dart';
 import 'providers/two_level_nodes_provider.dart';
 import 'widgets/keyboard_toolbar.dart';
@@ -402,11 +402,14 @@ class _NodePageState extends ConsumerState<NodePage>
   }
 
   // Spec 17: Backspace on empty node -> delete empty node & edit previous
-  Future<void> _handleBackspaceEmpty(Node node, TwoLevelTree tree) async {
+  Future<void> _handleBackspaceEmpty(
+    Node node,
+    List<VisibleNodeItem> items,
+  ) async {
     if (!_structuralCommandsInFlight.add(node.id)) return;
     _editorSession.suppressBlurCommit(node.id);
     try {
-      final previousItem = tree.findPreviousItem(node.id);
+      final previousItem = items.findPreviousItem(node.id);
 
       await _deleteEmptyNode(node.id);
       if (!mounted) return;
@@ -437,16 +440,8 @@ class _NodePageState extends ConsumerState<NodePage>
       () => ref.read(treeCommandServiceProvider).indentNode(nodeId),
     );
     if (mounted) {
-      if (keepEditing) {
-        ref
-            .read(nodePageControllerProvider(widget.parentId).notifier)
-            .startEditing(nodeId);
-        _editorSession.focus(nodeId);
-      } else {
-        ref
-            .read(nodePageControllerProvider(widget.parentId).notifier)
-            .toNormal();
-      }
+      _editorSession.unfocus();
+      ref.read(nodePageControllerProvider(widget.parentId).notifier).toNormal();
     }
   }
 
@@ -457,16 +452,8 @@ class _NodePageState extends ConsumerState<NodePage>
       () => ref.read(treeCommandServiceProvider).outdentNode(nodeId),
     );
     if (mounted) {
-      if (keepEditing) {
-        ref
-            .read(nodePageControllerProvider(widget.parentId).notifier)
-            .startEditing(nodeId);
-        _editorSession.focus(nodeId);
-      } else {
-        ref
-            .read(nodePageControllerProvider(widget.parentId).notifier)
-            .toNormal();
-      }
+      _editorSession.unfocus();
+      ref.read(nodePageControllerProvider(widget.parentId).notifier).toNormal();
     }
   }
 
@@ -588,16 +575,17 @@ class _NodePageState extends ConsumerState<NodePage>
                 ),
         ),
         body: treeAsync.when(
-          data: (tree) {
+          data: (items) {
             final activeItem = pageState.editingNodeId != null
-                ? tree.findItem(pageState.editingNodeId!)
+                ? items.findItem(pageState.editingNodeId!)
                 : null;
 
             return Column(
               children: [
                 Expanded(
                   child: NodeList(
-                    tree: tree,
+                    items: items,
+                    parentId: widget.parentId,
                     selectedNodeId: pageState.selectedNodeId,
                     editingNodeId: pageState.editingNodeId,
                     editorSession: _editorSession,
@@ -614,7 +602,7 @@ class _NodePageState extends ConsumerState<NodePage>
                     onEnter: (node, cursor, text) =>
                         _handleEnter(node, cursor, text),
                     onBackspaceEmpty: (node) =>
-                        _handleBackspaceEmpty(node, tree),
+                        _handleBackspaceEmpty(node, items),
                     onNavigate: _openNode,
                     onIndent: _handleIndent,
                     onOutdent: _handleOutdent,

@@ -5,11 +5,12 @@ import 'package:flutter/material.dart';
 import '../domain/node.dart';
 import '../domain/node_id.dart';
 import 'editor_session.dart';
-import 'models/two_level_tree.dart';
+import 'models/visible_node_item.dart';
 import 'widgets/node_row.dart';
 
 class NodeList extends StatelessWidget {
-  final TwoLevelTree tree;
+  final List<VisibleNodeItem> items;
+  final NodeId? parentId;
   final NodeId? selectedNodeId;
   final NodeId? editingNodeId;
   final EditorSession editorSession;
@@ -31,7 +32,8 @@ class NodeList extends StatelessWidget {
 
   const NodeList({
     super.key,
-    required this.tree,
+    required this.items,
+    required this.parentId,
     required this.selectedNodeId,
     required this.editingNodeId,
     required this.editorSession,
@@ -51,50 +53,31 @@ class NodeList extends StatelessWidget {
     required this.onBlankAreaTap,
   });
 
-  void _handleLevel1Reorder(int oldIndex, int newIndex) {
-    if (oldIndex < 0 || oldIndex >= tree.groups.length) return;
-    if (newIndex < 0 || newIndex >= tree.groups.length) return;
+  void _handleReorder(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= items.length) return;
+    if (newIndex < 0 || newIndex >= items.length) return;
     if (oldIndex == newIndex) return;
 
-    final l1Ids = tree.groups.map((g) => g.parent.id).toList();
-    final moved = l1Ids.removeAt(oldIndex);
-    l1Ids.insert(newIndex, moved);
+    final orderedIds = items.map((it) => it.id).toList();
+    final moved = orderedIds.removeAt(oldIndex);
+    orderedIds.insert(newIndex, moved);
 
-    final parentId = tree.groups.first.parent.parentId;
-    unawaited(onReorderSiblings(parentId, l1Ids));
-  }
-
-  void _handleLevel2Reorder(
-    NodeId parentId,
-    List<NodeId> currentChildIds,
-    int oldIndex,
-    int newIndex,
-  ) {
-    if (oldIndex < 0 || oldIndex >= currentChildIds.length) return;
-    if (newIndex < 0 || newIndex >= currentChildIds.length) return;
-    if (oldIndex == newIndex) return;
-
-    final reordered = [...currentChildIds];
-    final moved = reordered.removeAt(oldIndex);
-    reordered.insert(newIndex, moved);
-
-    unawaited(onReorderSiblings(parentId, reordered));
+    unawaited(onReorderSiblings(parentId, orderedIds));
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final groups = tree.groups;
 
     return CustomScrollView(
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.only(top: 8, bottom: 8),
           sliver: SliverReorderableList(
-            itemCount: groups.length,
+            itemCount: items.length,
             onReorderStart: (index) {
-              if (index >= 0 && index < groups.length) {
-                onReorderStart(groups[index].parent.id);
+              if (index >= 0 && index < items.length) {
+                onReorderStart(items[index].id);
               }
             },
             onReorderEnd: (index) {
@@ -116,112 +99,28 @@ class NodeList extends StatelessWidget {
                 },
               );
             },
-            onReorderItem: _handleLevel1Reorder,
+            onReorderItem: _handleReorder,
             itemBuilder: (context, index) {
-              final group = groups[index];
-              final parentItem = group.parent;
-              final children = group.children;
-
-              return KeyedSubtree(
-                key: ValueKey(parentItem.id),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Level 1 Row (Listener strictly scoped to Level 1 row only)
-                    ReorderableDelayedDragStartListener(
-                      index: index,
-                      enabled: editingNodeId == null,
-                      child: NodeRow(
-                        item: parentItem,
-                        isSelected: selectedNodeId == parentItem.id,
-                        isEditing: editingNodeId == parentItem.id,
-                        editorSession: editorSession,
-                        onSelect: () => onSelect(parentItem.id),
-                        onStartEditing: () => onStartEditing(parentItem.node),
-                        onNavigate: () => onNavigate(parentItem.node),
-                        onCommit: (text) => onCommit(parentItem.id, text),
-                        onChanged: (text) => onChanged(parentItem.node, text),
-                        onBlur: onBlur,
-                        onEnter: (cursor, text) =>
-                            onEnter(parentItem.node, cursor, text),
-                        onBackspaceEmpty: () =>
-                            onBackspaceEmpty(parentItem.node),
-                        onIndent: () => onIndent(parentItem.id),
-                        onOutdent: () => onOutdent(parentItem.id),
-                      ),
-                    ),
-                    // Level 2 Sub-list (Scoped strictly to this parent - Sibling Drag Boundary)
-                    if (children.isNotEmpty)
-                      ReorderableListView.builder(
-                        key: ValueKey('children-${parentItem.id}'),
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: children.length,
-                        buildDefaultDragHandles: false,
-                        onReorderStart: (childIndex) {
-                          if (childIndex >= 0 && childIndex < children.length) {
-                            onReorderStart(children[childIndex].id);
-                          }
-                        },
-                        onReorderEnd: (childIndex) {
-                          onReorderEnd();
-                        },
-                        onReorderItem: (oldIdx, newIdx) {
-                          final childIds = children.map((c) => c.id).toList();
-                          _handleLevel2Reorder(
-                            parentItem.id,
-                            childIds,
-                            oldIdx,
-                            newIdx,
-                          );
-                        },
-                        proxyDecorator: (child, index, animation) {
-                          return AnimatedBuilder(
-                            animation: animation,
-                            builder: (context, _) {
-                              return Transform.scale(
-                                scale: 1.02,
-                                child: Material(
-                                  elevation: 3,
-                                  color: Colors.transparent,
-                                  borderRadius: BorderRadius.circular(11),
-                                  child: child,
-                                ),
-                              );
-                            },
-                          );
-                        },
-                        itemBuilder: (context, childIndex) {
-                          final childItem = children[childIndex];
-                          return ReorderableDelayedDragStartListener(
-                            key: ValueKey(childItem.id),
-                            index: childIndex,
-                            enabled: editingNodeId == null,
-                            child: NodeRow(
-                              item: childItem,
-                              isSelected: selectedNodeId == childItem.id,
-                              isEditing: editingNodeId == childItem.id,
-                              editorSession: editorSession,
-                              onSelect: () => onSelect(childItem.id),
-                              onStartEditing: () =>
-                                  onStartEditing(childItem.node),
-                              onNavigate: () => onNavigate(childItem.node),
-                              onCommit: (text) => onCommit(childItem.id, text),
-                              onChanged: (text) =>
-                                  onChanged(childItem.node, text),
-                              onBlur: onBlur,
-                              onEnter: (cursor, text) =>
-                                  onEnter(childItem.node, cursor, text),
-                              onBackspaceEmpty: () =>
-                                  onBackspaceEmpty(childItem.node),
-                              onIndent: () => onIndent(childItem.id),
-                              onOutdent: () => onOutdent(childItem.id),
-                            ),
-                          );
-                        },
-                      ),
-                  ],
+              final item = items[index];
+              return ReorderableDelayedDragStartListener(
+                key: ValueKey(item.id),
+                index: index,
+                enabled: editingNodeId == null,
+                child: NodeRow(
+                  item: item,
+                  isSelected: selectedNodeId == item.id,
+                  isEditing: editingNodeId == item.id,
+                  editorSession: editorSession,
+                  onSelect: () => onSelect(item.id),
+                  onStartEditing: () => onStartEditing(item.node),
+                  onNavigate: () => onNavigate(item.node),
+                  onCommit: (text) => onCommit(item.id, text),
+                  onChanged: (text) => onChanged(item.node, text),
+                  onBlur: onBlur,
+                  onEnter: (cursor, text) => onEnter(item.node, cursor, text),
+                  onBackspaceEmpty: () => onBackspaceEmpty(item.node),
+                  onIndent: () => onIndent(item.id),
+                  onOutdent: () => onOutdent(item.id),
                 ),
               );
             },
@@ -237,7 +136,7 @@ class NodeList extends StatelessWidget {
             child: Container(
               constraints: const BoxConstraints(minHeight: 120),
               color: Colors.transparent,
-              child: groups.isEmpty
+              child: items.isEmpty
                   ? Center(
                       child: Text(
                         '点击空白处开始记录',

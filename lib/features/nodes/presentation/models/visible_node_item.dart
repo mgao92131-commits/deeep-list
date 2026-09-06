@@ -3,7 +3,6 @@ import '../../domain/node_id.dart';
 
 class VisibleNodeItem {
   final Node node;
-  final int level;
   final NodeId? parentId;
   final bool hasPreviousSibling;
   final NodeId? previousSiblingId;
@@ -11,7 +10,6 @@ class VisibleNodeItem {
 
   const VisibleNodeItem({
     required this.node,
-    required this.level,
     required this.parentId,
     required this.hasPreviousSibling,
     this.previousSiblingId,
@@ -22,15 +20,24 @@ class VisibleNodeItem {
   String get content => node.content;
   bool get isDone => node.isDone;
 
-  /// Spec 20-22:
-  /// 右滑 -> Indent:
-  /// - 成为上一个同级节点的子节点 (must have previous sibling)
-  /// - 第二层不允许继续右滑 (level 2 cannot indent, otherwise exceeds 2 visible levels)
-  bool get canIndent => level == 1 && hasPreviousSibling;
+  /// 右滑 -> Indent: 成为上一个同级节点的子节点 (must have previous sibling)
+  bool get canIndent => hasPreviousSibling;
 
-  /// Spec 23-24:
-  /// 左滑 -> Outdent:
-  /// - 提升一级，移动到 Parent 的同级层
-  /// - 已经无法提升的 Node (level 1 cannot outdent)
-  bool get canOutdent => level == 2;
+  /// 左滑 -> Outdent: 提升一级，移动到 Parent 的同级层 (root nodes cannot outdent)
+  bool get canOutdent => parentId != null;
+}
+
+extension VisibleNodeItemListX on List<VisibleNodeItem> {
+  VisibleNodeItem? findItem(NodeId id) {
+    for (final item in this) {
+      if (item.id == id) return item;
+    }
+    return null;
+  }
+
+  VisibleNodeItem? findPreviousItem(NodeId id) {
+    final index = indexWhere((it) => it.id == id);
+    if (index > 0) return this[index - 1];
+    return null;
+  }
 }

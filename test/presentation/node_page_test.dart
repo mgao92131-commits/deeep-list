@@ -302,16 +302,26 @@ void main() {
   );
 
   testWidgets(
-    'displays exactly two levels (Level 1 + Level 2) and hides Level 3',
+    'displays only direct children for current parent and reveals descendants upon navigation',
     (tester) async {
       final l1 = await commands.createNode(parentId: null, content: 'L1-Node');
       final l2 = await commands.createNode(parentId: l1.id, content: 'L2-Node');
       await commands.createNode(parentId: l2.id, content: 'L3-Node');
       await pumpApp(tester);
 
+      // Root page: only direct root children are displayed
       expect(find.text('L1-Node'), findsOneWidget);
+      expect(find.text('L2-Node'), findsNothing);
+      expect(find.text('L3-Node'), findsNothing);
+
+      // Tap on L1-Node to select it, then tap chevron to navigate into it
+      await tester.tap(find.text('L1-Node'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.chevron_right));
+      await tester.pumpAndSettle();
+
+      // Inside L1 page: only direct children (L2) are displayed, L3 remains hidden
       expect(find.text('L2-Node'), findsOneWidget);
-      // L3 must NOT be visible on this page! (Spec 2)
       expect(find.text('L3-Node'), findsNothing);
     },
   );

@@ -124,14 +124,11 @@ void main() {
       await tester.tap(find.byTooltip('Indent'));
       await tester.pumpAndSettle();
 
-      // 工作项 should now be a child of 工作 (Level 2)
+      // 工作项 should now be a child of 工作, moving into 工作's subpage
       final secondNode = await repository.getNode(second.id);
       expect(secondNode!.parentId, first.id);
 
-      // Tapping 完成 finishes editing
-      await tester.tap(find.text('完成'));
-      await tester.pumpAndSettle();
-
+      // In single-level drilldown, once indented into child page, it moves out of root page
       final controller = ProviderScope.containerOf(
         tester.element(find.byType(DeepListApp)),
       ).read(nodePageControllerProvider(null));
@@ -244,26 +241,33 @@ void main() {
   );
 
   testWidgets(
-    'Horizontal swipe left triggers outdent for Level 2 node and is no-op for Level 1 (Spec 23-24)',
+    'Horizontal swipe left triggers outdent for child node and is no-op at root',
     (tester) async {
       final l1 = await commands.createNode(parentId: null, content: 'L1');
       final l2 = await commands.createNode(parentId: l1.id, content: 'L2');
       await pumpApp(tester);
 
-      // Swipe left on L2 by -80dp (exceeds -55dp armed threshold)
-      await tester.drag(find.text('L2'), const Offset(-80, 0));
-      await tester.pumpAndSettle();
-
-      // L2 should now be elevated to top level (Level 1)
-      final updatedL2 = await repository.getNode(l2.id);
-      expect(updatedL2!.parentId, isNull);
-
-      // Swipe left on L1 by -80dp -> no-op because L1 cannot outdent
+      // On Root page: Swipe left on L1 by -80dp -> no-op because root nodes cannot outdent
       await tester.drag(find.text('L1'), const Offset(-80, 0));
       await tester.pumpAndSettle();
 
       final updatedL1 = await repository.getNode(l1.id);
       expect(updatedL1!.parentId, isNull);
+
+      // Navigate into L1
+      await tester.tap(find.text('L1'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.chevron_right));
+      await tester.pumpAndSettle();
+
+      // Inside L1: L2 is displayed. Swipe left on L2 by -80dp to outdent
+      await tester.drag(find.text('L2'), const Offset(-80, 0));
+      await tester.pumpAndSettle();
+
+      // L2 should now be elevated to top level (parentId == null) and removed from L1
+      final updatedL2 = await repository.getNode(l2.id);
+      expect(updatedL2!.parentId, isNull);
+      expect(find.text('L2'), findsNothing);
     },
   );
 
@@ -365,6 +369,12 @@ void main() {
       await commands.createNode(parentId: parent.id, content: 'A3');
       await pumpApp(tester);
 
+      // Navigate into Parent
+      await tester.tap(find.text('Parent'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.chevron_right));
+      await tester.pumpAndSettle();
+
       // Long press A1 and drag downward to A3 to place after A2
       await longPressDrag(tester, find.text('A1'), find.text('A3'));
 
@@ -388,6 +398,12 @@ void main() {
       await commands.createNode(parentId: parent.id, content: 'A2');
       await commands.createNode(parentId: parent.id, content: 'A3');
       await pumpApp(tester);
+
+      // Navigate into Parent
+      await tester.tap(find.text('Parent'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.chevron_right));
+      await tester.pumpAndSettle();
 
       // Long press A3 and drag upward to A2 to place between A1 and A2
       await longPressDrag(tester, find.text('A3'), find.text('A2'));
@@ -413,12 +429,12 @@ void main() {
 
       final screenWidth = tester.getSize(find.byType(DeepListApp)).width;
 
-      // Find all NodeRows
+      // On root page: 2 direct root NodeRows
       final nodeRowFinders = find.byType(NodeRow);
-      expect(nodeRowFinders, findsNWidgets(3));
+      expect(nodeRowFinders, findsNWidgets(2));
 
       // 1. Every NodeRow must span the entire screen width
-      for (var i = 0; i < 3; i++) {
+      for (var i = 0; i < 2; i++) {
         final rowSize = tester.getSize(nodeRowFinders.at(i));
         expect(rowSize.width, screenWidth);
       }
@@ -429,7 +445,7 @@ void main() {
         of: nodeRowFinders,
         matching: find.byType(AnimatedContainer),
       );
-      for (var i = 0; i < 3; i++) {
+      for (var i = 0; i < 2; i++) {
         final containerSize = tester.getSize(animatedContainers.at(i));
         expect(containerSize.width, screenWidth);
         final stackFinder = find.descendant(
@@ -440,15 +456,11 @@ void main() {
         expect(tester.getTopLeft(stackFinder).dx, 8.0);
       }
 
-      // 3. Text start x coordinates:
-      // Level 1: 8dp margin + 12dp innerLeftPadding = 20.0
-      // Level 2: 8dp margin + 36dp innerLeftPadding = 44.0
+      // 3. Text start x coordinates: unified 20.0 for all nodes (Spec: 8dp margin + 12dp innerLeftPadding)
       final shortTextPos = tester.getTopLeft(find.text('短'));
       final longTextPos = tester.getTopLeft(find.text(longNode.content));
-      final childTextPos = tester.getTopLeft(find.text('二级节点'));
       expect(shortTextPos.dx, 20.0);
       expect(longTextPos.dx, 20.0);
-      expect(childTextPos.dx, 44.0);
 
       // 4. In Selected state:
       // Tap short node '短'
@@ -472,34 +484,32 @@ void main() {
   );
 
   testWidgets(
-    'Light divider in Normal state follows level indent (20dp for L1, 44dp for L2) and hides in Selected',
+    'Light divider in Normal state has 20dp indent and hides in Selected state',
     (tester) async {
-      final l1 = await commands.createNode(parentId: null, content: '工作');
-      await commands.createNode(parentId: l1.id, content: 'DeepList');
+      await commands.createNode(parentId: null, content: '工作');
+      await commands.createNode(parentId: null, content: '生活');
       await pumpApp(tester);
 
-      // Normal state: 2 dividers for 2 nodes
+      // Normal state: 2 dividers for 2 nodes, both indented at 20.0
       final dividers = tester
           .widgetList<Divider>(find.byType(Divider))
           .toList();
       expect(dividers, hasLength(2));
-
-      // Level 1 divider starts at 20.0, Level 2 divider starts at 44.0
       expect(dividers[0].indent, 20.0);
       expect(dividers[0].endIndent, 0.0);
-      expect(dividers[1].indent, 44.0);
+      expect(dividers[1].indent, 20.0);
       expect(dividers[1].endIndent, 0.0);
 
-      // Tap L1 node to enter Selected state
+      // Tap '工作' to enter Selected state
       await tester.tap(find.text('工作'));
       await tester.pumpAndSettle();
 
-      // Selected node hides its divider -> only 1 divider remaining (Level 2)
+      // Selected node hides its divider -> only 1 divider remaining ('生活')
       final remainingDividers = tester
           .widgetList<Divider>(find.byType(Divider))
           .toList();
       expect(remainingDividers, hasLength(1));
-      expect(remainingDividers[0].indent, 44.0);
+      expect(remainingDividers[0].indent, 20.0);
     },
   );
 
