@@ -358,7 +358,7 @@ void main() {
   });
 
   testWidgets(
-    'Level 2 downward drag reorder within parent: A1 A2 A3 -> A2 A1 A3',
+    'Nested-page downward drag reorder within parent: A1 A2 A3 -> A2 A1 A3',
     (tester) async {
       final parent = await commands.createNode(
         parentId: null,
@@ -388,7 +388,7 @@ void main() {
   );
 
   testWidgets(
-    'Level 2 upward drag reorder within parent: A1 A2 A3 -> A1 A3 A2',
+    'Nested-page upward drag reorder within parent: A1 A2 A3 -> A1 A3 A2',
     (tester) async {
       final parent = await commands.createNode(
         parentId: null,
@@ -768,6 +768,86 @@ void main() {
 
       // MUST NOT have any error SnackBar!
       expect(find.byType(SnackBar), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'Empty node Indent via keyboard toolbar safely deletes it without moving',
+    (tester) async {
+      final first = await commands.createNode(
+        parentId: null,
+        content: 'Existing',
+      );
+      await pumpApp(tester);
+
+      // Create an empty trailing node and enter editing
+      await tester.tap(find.byKey(const ValueKey('blank-area')));
+      await tester.pumpAndSettle();
+
+      // Empty node has previous sibling 'Existing', so Indent is enabled on KeyboardToolbar
+      expect(find.byTooltip('Indent'), findsOneWidget);
+
+      // Tap Indent on empty node
+      await tester.tap(find.byTooltip('Indent'));
+      await tester.pumpAndSettle();
+
+      // The empty node must be cleanly deleted!
+      // Must NOT remain as a child of Existing
+      expect(await repository.getChildren(first.id), isEmpty);
+      // Root list should only contain Existing
+      final rootNodes = await repository.getChildren(null);
+      expect(rootNodes.map((n) => n.content), ['Existing']);
+
+      // Editing session must end cleanly, mode returns to normal
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DeepListApp)),
+      );
+      expect(
+        container.read(nodePageControllerProvider(null)).mode,
+        PageMode.normal,
+      );
+    },
+  );
+
+  testWidgets(
+    'Empty node Outdent via keyboard toolbar safely deletes it without moving',
+    (tester) async {
+      final parent = await commands.createNode(
+        parentId: null,
+        content: 'Parent',
+      );
+      await pumpApp(tester);
+
+      // Enter Parent subpage
+      await tester.tap(find.text('Parent'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.chevron_right));
+      await tester.pumpAndSettle();
+
+      // Inside Parent: create an empty node and enter editing
+      await tester.tap(find.byKey(const ValueKey('blank-area')));
+      await tester.pumpAndSettle();
+
+      // Empty node has parentId != null, so Outdent is enabled on KeyboardToolbar
+      expect(find.byTooltip('Outdent'), findsOneWidget);
+
+      // Tap Outdent on empty node
+      await tester.tap(find.byTooltip('Outdent'));
+      await tester.pumpAndSettle();
+
+      // The empty node must be cleanly deleted!
+      // Must NOT be elevated to root or remain anywhere
+      expect(await repository.getChildren(parent.id), isEmpty);
+      expect(await repository.getChildren(null), hasLength(1));
+
+      // Mode returns to normal
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DeepListApp)),
+      );
+      expect(
+        container.read(nodePageControllerProvider(parent.id)).mode,
+        PageMode.normal,
+      );
     },
   );
 }

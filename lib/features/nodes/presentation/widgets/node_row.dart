@@ -391,7 +391,7 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
                 ),
               ),
             ),
-            // Light divider in Normal (non-selected) state with level-aware indent
+            // Light divider in Normal (non-selected) state
             if (!widget.isSelected)
               Divider(
                 height: 1,

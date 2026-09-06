@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:deep_list/app/app.dart';
 import 'package:deep_list/app/providers.dart';
 import 'package:deep_list/features/nodes/application/tree_command_service.dart';
+import 'package:deep_list/features/nodes/presentation/widgets/node_row.dart';
 
 import '../helpers/memory_node_repository.dart';
 
@@ -304,25 +305,86 @@ void main() {
   testWidgets(
     'displays only direct children for current parent and reveals descendants upon navigation',
     (tester) async {
+      Finder rowText(String text) =>
+          find.descendant(of: find.byType(NodeRow), matching: find.text(text));
+
       final l1 = await commands.createNode(parentId: null, content: 'L1-Node');
       final l2 = await commands.createNode(parentId: l1.id, content: 'L2-Node');
       await commands.createNode(parentId: l2.id, content: 'L3-Node');
       await pumpApp(tester);
 
-      // Root page: only direct root children are displayed
-      expect(find.text('L1-Node'), findsOneWidget);
-      expect(find.text('L2-Node'), findsNothing);
-      expect(find.text('L3-Node'), findsNothing);
+      // Root page: only direct root children are displayed in the list
+      expect(rowText('L1-Node'), findsOneWidget);
+      expect(rowText('L2-Node'), findsNothing);
+      expect(rowText('L3-Node'), findsNothing);
 
-      // Tap on L1-Node to select it, then tap chevron to navigate into it
-      await tester.tap(find.text('L1-Node'));
+      // 1. Enter L1-Node
+      await tester.tap(rowText('L1-Node'));
       await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.chevron_right));
       await tester.pumpAndSettle();
 
-      // Inside L1 page: only direct children (L2) are displayed, L3 remains hidden
-      expect(find.text('L2-Node'), findsOneWidget);
-      expect(find.text('L3-Node'), findsNothing);
+      // Inside L1 page: only direct children (L2) are displayed in the list
+      expect(rowText('L1-Node'), findsNothing);
+      expect(rowText('L2-Node'), findsOneWidget);
+      expect(rowText('L3-Node'), findsNothing);
+      // AppBar title reflects current parent
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('L1-Node'),
+        ),
+        findsOneWidget,
+      );
+
+      // 2. Enter L2-Node
+      await tester.tap(rowText('L2-Node'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.chevron_right));
+      await tester.pumpAndSettle();
+
+      // Inside L2 page: only direct children (L3) are displayed in the list
+      expect(rowText('L2-Node'), findsNothing);
+      expect(rowText('L3-Node'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('L2-Node'),
+        ),
+        findsOneWidget,
+      );
+
+      // 3. Pop back to L1
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(rowText('L2-Node'), findsOneWidget);
+      expect(rowText('L3-Node'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('L1-Node'),
+        ),
+        findsOneWidget,
+      );
+
+      // 4. Pop back to Root
+      // On L1 page, L2 was selected so first back transitions Selected -> Normal (Spec 35)
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      // Second back pops to Root
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(rowText('L1-Node'), findsOneWidget);
+      expect(rowText('L2-Node'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('DeepList'),
+        ),
+        findsOneWidget,
+      );
     },
   );
 

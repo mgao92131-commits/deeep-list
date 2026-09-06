@@ -12,7 +12,7 @@ import '../domain/node_id.dart';
 import 'editor_session.dart';
 import 'models/visible_node_item.dart';
 import 'node_list.dart';
-import 'providers/two_level_nodes_provider.dart';
+import 'providers/visible_nodes_provider.dart';
 import 'widgets/keyboard_toolbar.dart';
 import 'widgets/selection_toolbar.dart';
 
@@ -434,7 +434,20 @@ class _NodePageState extends ConsumerState<NodePage>
   }
 
   // Spec 20-22: Swipe Right -> Indent
-  Future<void> _handleIndent(NodeId nodeId, {bool keepEditing = false}) async {
+  Future<void> _handleIndent(NodeId nodeId) async {
+    final isEditingThis = _editorSession.activeNodeId == nodeId;
+    final text = isEditingThis ? _editorSession.activeText : null;
+    if (isEditingThis && text != null && text.trim().isEmpty) {
+      _editorSession.unfocus();
+      if (mounted) {
+        ref
+            .read(nodePageControllerProvider(widget.parentId).notifier)
+            .toNormal();
+      }
+      await _deleteEmptyNode(nodeId);
+      return;
+    }
+
     await _flushPendingEdit(commitCurrent: true);
     await _runMutation(
       () => ref.read(treeCommandServiceProvider).indentNode(nodeId),
@@ -446,7 +459,20 @@ class _NodePageState extends ConsumerState<NodePage>
   }
 
   // Spec 23-24: Swipe Left -> Outdent
-  Future<void> _handleOutdent(NodeId nodeId, {bool keepEditing = false}) async {
+  Future<void> _handleOutdent(NodeId nodeId) async {
+    final isEditingThis = _editorSession.activeNodeId == nodeId;
+    final text = isEditingThis ? _editorSession.activeText : null;
+    if (isEditingThis && text != null && text.trim().isEmpty) {
+      _editorSession.unfocus();
+      if (mounted) {
+        ref
+            .read(nodePageControllerProvider(widget.parentId).notifier)
+            .toNormal();
+      }
+      await _deleteEmptyNode(nodeId);
+      return;
+    }
+
     await _flushPendingEdit(commitCurrent: true);
     await _runMutation(
       () => ref.read(treeCommandServiceProvider).outdentNode(nodeId),
@@ -546,7 +572,7 @@ class _NodePageState extends ConsumerState<NodePage>
 
   @override
   Widget build(BuildContext context) {
-    final treeAsync = ref.watch(twoLevelNodesProvider(widget.parentId));
+    final nodesAsync = ref.watch(visibleNodesProvider(widget.parentId));
     final pageState = ref.watch(nodePageControllerProvider(widget.parentId));
     final parent = widget.parentId == null
         ? null
@@ -574,7 +600,7 @@ class _NodePageState extends ConsumerState<NodePage>
                   onPressed: () => unawaited(_handleBack()),
                 ),
         ),
-        body: treeAsync.when(
+        body: nodesAsync.when(
           data: (items) {
             final activeItem = pageState.editingNodeId != null
                 ? items.findItem(pageState.editingNodeId!)
@@ -633,12 +659,8 @@ class _NodePageState extends ConsumerState<NodePage>
                   KeyboardToolbar(
                     canOutdent: activeItem.canOutdent,
                     canIndent: activeItem.canIndent,
-                    onOutdent: () => unawaited(
-                      _handleOutdent(activeItem.id, keepEditing: true),
-                    ),
-                    onIndent: () => unawaited(
-                      _handleIndent(activeItem.id, keepEditing: true),
-                    ),
+                    onOutdent: () => unawaited(_handleOutdent(activeItem.id)),
+                    onIndent: () => unawaited(_handleIndent(activeItem.id)),
                     onDone: () async {
                       await _finishActiveEditing(discardIfEmpty: true);
                     },

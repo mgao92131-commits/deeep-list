@@ -28,5 +28,3 @@ final visibleNodesProvider = Provider.autoDispose
         error: (error, stack) => AsyncValue.error(error, stack),
       );
     });
-
-final twoLevelNodesProvider = visibleNodesProvider;
