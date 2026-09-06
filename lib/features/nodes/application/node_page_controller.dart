@@ -17,9 +17,16 @@ class NodePageState {
   NodeId? get draggingNodeId => mode == PageMode.dragging ? activeNodeId : null;
 
   bool get isNormal => mode == PageMode.normal;
-  bool isSelected(NodeId id) => mode == PageMode.selected && activeNodeId == id;
-  bool isEditing(NodeId id) => mode == PageMode.editing && activeNodeId == id;
-  bool isDragging(NodeId id) => mode == PageMode.dragging && activeNodeId == id;
+  bool get isSelected => mode == PageMode.selected;
+  bool get isEditing => mode == PageMode.editing;
+  bool get isDragging => mode == PageMode.dragging;
+
+  bool isNodeSelected(NodeId id) =>
+      mode == PageMode.selected && activeNodeId == id;
+  bool isNodeEditing(NodeId id) =>
+      mode == PageMode.editing && activeNodeId == id;
+  bool isNodeDragging(NodeId id) =>
+      mode == PageMode.dragging && activeNodeId == id;
 
   Set<NodeId> get selectedNodeIds =>
       selectedNodeId != null ? {selectedNodeId!} : const <NodeId>{};
@@ -62,7 +69,7 @@ class NodePageController extends _$NodePageController {
   }
 
   void toggleSelection(NodeId nodeId) {
-    if (state.isSelected(nodeId)) {
+    if (state.isNodeSelected(nodeId)) {
       toNormal();
     } else {
       selectNode(nodeId);

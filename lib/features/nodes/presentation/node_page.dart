@@ -10,7 +10,7 @@ import '../application/node_page_controller.dart';
 import '../domain/node.dart';
 import '../domain/node_id.dart';
 import 'editor_session.dart';
-import 'models/visible_node_item.dart';
+import 'models/two_level_tree.dart';
 import 'node_list.dart';
 import 'providers/two_level_nodes_provider.dart';
 import 'widgets/keyboard_toolbar.dart';
@@ -58,17 +58,17 @@ class _NodePageState extends ConsumerState<NodePage>
 
   @override
   void didPushNext() {
-    unawaited(_finishEditingForRouteChange());
+    unawaited(_finishActiveEditing(discardIfEmpty: true));
   }
 
   @override
   void didPop() {
-    unawaited(_finishEditingForRouteChange());
+    unawaited(_finishActiveEditing(discardIfEmpty: true));
   }
 
   @override
   void didPopNext() {
-    unawaited(_finishEditingForRouteChange());
+    unawaited(_finishActiveEditing(discardIfEmpty: true));
   }
 
   @override
@@ -77,7 +77,7 @@ class _NodePageState extends ConsumerState<NodePage>
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
-      unawaited(_flushPendingEdit(commitCurrent: true));
+      unawaited(_finishActiveEditing(discardIfEmpty: true));
     }
   }
 
@@ -92,40 +92,63 @@ class _NodePageState extends ConsumerState<NodePage>
     super.dispose();
   }
 
-  Future<bool> _finishEditingForRouteChange() async {
-    final activeId = _editorSession.activeNodeId;
-    final activeText = _editorSession.activeText;
+  // Issue 3: Universal single exit point for editing sessions
+  Future<bool> _finishActiveEditing({bool discardIfEmpty = true}) async {
+    _autosaveTimer?.cancel();
+    _autosaveTimer = null;
+    _pendingAutosaveNodeId = null;
+    _pendingAutosaveText = null;
 
-    if (activeId != null && (activeText == null || activeText.trim().isEmpty)) {
-      // Clean up empty transient node on route change
-      await _deleteEmptyNode(activeId);
-      if (mounted) {
-        ref
-            .read(nodePageControllerProvider(widget.parentId).notifier)
-            .toNormal();
+    final activeId =
+        _editorSession.activeNodeId ??
+        ref.read(nodePageControllerProvider(widget.parentId)).editingNodeId;
+
+    if (activeId != null) {
+      final activeText = _editorSession.activeText;
+      final isEmpty = activeText == null || activeText.trim().isEmpty;
+
+      if (isEmpty && discardIfEmpty) {
+        _editorSession.suppressBlurCommit(activeId);
+        try {
+          await _deleteEmptyNode(activeId);
+        } finally {
+          _editorSession.allowBlurCommit(activeId);
+        }
+        _editorSession.unfocus();
+        if (mounted) {
+          final currentMode = ref
+              .read(nodePageControllerProvider(widget.parentId))
+              .mode;
+          if (currentMode == PageMode.editing) {
+            ref
+                .read(nodePageControllerProvider(widget.parentId).notifier)
+                .toNormal();
+          }
+        }
+        return true;
       }
-      return true;
     }
 
     final saved = await _flushPendingEdit(commitCurrent: true);
     if (mounted) {
-      ref.read(nodePageControllerProvider(widget.parentId).notifier).toNormal();
+      final currentMode = ref
+          .read(nodePageControllerProvider(widget.parentId))
+          .mode;
+      if (currentMode == PageMode.editing) {
+        ref
+            .read(nodePageControllerProvider(widget.parentId).notifier)
+            .toNormal();
+      }
     }
     return saved;
   }
 
   Future<void> _startEditing(Node node) async {
-    // If currently editing another empty node, clean it up first
     final currentEditingId = ref
         .read(nodePageControllerProvider(widget.parentId))
         .editingNodeId;
     if (currentEditingId != null && currentEditingId != node.id) {
-      final currentText = _editorSession.activeText;
-      if (currentText == null || currentText.trim().isEmpty) {
-        await _deleteEmptyNode(currentEditingId);
-      } else {
-        await _flushPendingEdit(commitCurrent: true);
-      }
+      await _finishActiveEditing(discardIfEmpty: true);
     }
 
     if (!mounted) return;
@@ -142,12 +165,7 @@ class _NodePageState extends ConsumerState<NodePage>
         .read(nodePageControllerProvider(widget.parentId))
         .editingNodeId;
     if (currentEditingId != null) {
-      final currentText = _editorSession.activeText;
-      if (currentText == null || currentText.trim().isEmpty) {
-        await _deleteEmptyNode(currentEditingId);
-      } else {
-        await _flushPendingEdit(commitCurrent: true);
-      }
+      await _finishActiveEditing(discardIfEmpty: true);
     }
 
     if (!mounted) return;
@@ -216,7 +234,6 @@ class _NodePageState extends ConsumerState<NodePage>
       _pendingAutosaveText = null;
     }
 
-    // Spec 13 & 16: If text is empty on commit/blur, remove it
     if (text.trim().isEmpty) {
       await _deleteEmptyNode(nodeId);
       if (mounted) {
@@ -319,36 +336,12 @@ class _NodePageState extends ConsumerState<NodePage>
     }
   }
 
-  Future<void> _handleBackspaceMerge(Node node, int cursor, String text) async {
-    if (!_structuralCommandsInFlight.add(node.id)) return;
-    _editorSession.suppressBlurCommit(node.id);
-    try {
-      if (!await _flushPendingEdit(commitCurrent: true)) return;
-      final result = await _runMutation(
-        () => ref.read(treeCommandServiceProvider).mergeWithPrevious(node.id),
-      );
-      if (result == null || !mounted) return;
-
-      ref
-          .read(nodePageControllerProvider(widget.parentId).notifier)
-          .startEditing(result.targetNodeId);
-      _editorSession.focus(result.targetNodeId, cursor: result.cursorPosition);
-    } finally {
-      _editorSession.allowBlurCommit(node.id);
-      _structuralCommandsInFlight.remove(node.id);
-    }
-  }
-
   // Spec 17: Backspace on empty node -> delete empty node & edit previous
-  Future<void> _handleBackspaceEmpty(
-    Node node,
-    List<VisibleNodeItem> items,
-  ) async {
+  Future<void> _handleBackspaceEmpty(Node node, TwoLevelTree tree) async {
     if (!_structuralCommandsInFlight.add(node.id)) return;
     _editorSession.suppressBlurCommit(node.id);
     try {
-      final index = items.indexWhere((it) => it.id == node.id);
-      final previousItem = index > 0 ? items[index - 1] : null;
+      final previousItem = tree.findPreviousItem(node.id);
 
       await _deleteEmptyNode(node.id);
       if (!mounted) return;
@@ -424,9 +417,9 @@ class _NodePageState extends ConsumerState<NodePage>
     );
   }
 
-  // Spec 18-19: Blank Area Click -> Create transient empty node
+  // Spec 18-19 & Issue 4: Blank Area Click -> 1 tap creates transient empty node and edits
   Future<void> _createTrailingNode() async {
-    if (!await _finishEditingForRouteChange()) return;
+    await _finishActiveEditing(discardIfEmpty: true);
     final node = await _runMutation(
       () => ref
           .read(treeCommandServiceProvider)
@@ -440,7 +433,7 @@ class _NodePageState extends ConsumerState<NodePage>
   }
 
   Future<void> _openNode(Node node) async {
-    if (!await _finishEditingForRouteChange()) return;
+    await _finishActiveEditing(discardIfEmpty: true);
     if (!mounted) return;
     context.push('/node/${node.id}');
   }
@@ -501,7 +494,7 @@ class _NodePageState extends ConsumerState<NodePage>
 
   @override
   Widget build(BuildContext context) {
-    final visibleNodesAsync = ref.watch(twoLevelNodesProvider(widget.parentId));
+    final treeAsync = ref.watch(twoLevelNodesProvider(widget.parentId));
     final pageState = ref.watch(nodePageControllerProvider(widget.parentId));
     final parent = widget.parentId == null
         ? null
@@ -529,19 +522,17 @@ class _NodePageState extends ConsumerState<NodePage>
                   onPressed: () => unawaited(_handleBack()),
                 ),
         ),
-        body: visibleNodesAsync.when(
-          data: (items) {
+        body: treeAsync.when(
+          data: (tree) {
             final activeItem = pageState.editingNodeId != null
-                ? items
-                      .where((it) => it.id == pageState.editingNodeId)
-                      .firstOrNull
+                ? tree.findItem(pageState.editingNodeId!)
                 : null;
 
             return Column(
               children: [
                 Expanded(
                   child: NodeList(
-                    items: items,
+                    tree: tree,
                     selectedNodeId: pageState.selectedNodeId,
                     editingNodeId: pageState.editingNodeId,
                     editorSession: _editorSession,
@@ -549,16 +540,28 @@ class _NodePageState extends ConsumerState<NodePage>
                     onStartEditing: _startEditing,
                     onCommit: _commit,
                     onChanged: (node, text) => _scheduleAutosave(node.id, text),
-                    onEnter: _handleEnter,
+                    onBlur: (text) {
+                      if (text.trim().isEmpty) {
+                        unawaited(_finishActiveEditing(discardIfEmpty: true));
+                      }
+                    },
+                    onEnter: (node, cursor, text) =>
+                        _handleEnter(node, cursor, text),
                     onBackspaceEmpty: (node) =>
-                        _handleBackspaceEmpty(node, items),
-                    onBackspaceMerge: _handleBackspaceMerge,
+                        _handleBackspaceEmpty(node, tree),
                     onNavigate: _openNode,
                     onIndent: _handleIndent,
                     onOutdent: _handleOutdent,
-                    onReorderSiblings: _handleReorderSiblings,
-                    onBlankAreaTap: () => unawaited(_createTrailingNode()),
-                    onDeselect: () {
+                    onReorderStart: (id) {
+                      ref
+                          .read(
+                            nodePageControllerProvider(
+                              widget.parentId,
+                            ).notifier,
+                          )
+                          .startDragging(id);
+                    },
+                    onReorderEnd: () {
                       ref
                           .read(
                             nodePageControllerProvider(
@@ -567,6 +570,8 @@ class _NodePageState extends ConsumerState<NodePage>
                           )
                           .toNormal();
                     },
+                    onReorderSiblings: _handleReorderSiblings,
+                    onBlankAreaTap: () => unawaited(_createTrailingNode()),
                   ),
                 ),
                 // Spec 29: Keyboard Toolbar above keyboard during Editing
@@ -581,23 +586,7 @@ class _NodePageState extends ConsumerState<NodePage>
                       _handleIndent(activeItem.id, keepEditing: true),
                     ),
                     onDone: () async {
-                      final text =
-                          _editorSession.activeText ?? activeItem.content;
-                      if (text.trim().isEmpty) {
-                        await _deleteEmptyNode(activeItem.id);
-                      } else {
-                        await _commit(activeItem.id, text);
-                      }
-                      _editorSession.unfocus();
-                      if (mounted) {
-                        ref
-                            .read(
-                              nodePageControllerProvider(
-                                widget.parentId,
-                              ).notifier,
-                            )
-                            .toNormal();
-                      }
+                      await _finishActiveEditing(discardIfEmpty: true);
                     },
                   ),
               ],
@@ -607,15 +596,15 @@ class _NodePageState extends ConsumerState<NodePage>
           error: (error, stackTrace) =>
               Center(child: Text('Unable to load nodes: $error')),
         ),
-        // Spec 33: Selected Bottom Toolbar (Delete, More)
+        // Spec 33 & Issue 1: Selected Bottom Toolbar (hidden when dragging)
         floatingActionButton:
             pageState.mode == PageMode.selected &&
+                !pageState.isDragging &&
                 pageState.selectedNodeId != null
             ? SelectionToolbar(
                 onDelete: () =>
                     unawaited(_deleteSelectedNode(pageState.selectedNodeId!)),
                 onMore: () {
-                  // Lightweight more actions
                   showModalBottomSheet<void>(
                     context: context,
                     builder: (sheetContext) => SafeArea(

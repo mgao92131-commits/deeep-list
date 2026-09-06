@@ -17,9 +17,9 @@ class NodeRow extends StatefulWidget {
   final Future<void> Function() onNavigate;
   final Future<void> Function(String text) onCommit;
   final ValueChanged<String> onChanged;
+  final ValueChanged<String>? onBlur;
   final Future<void> Function(int cursor, String text) onEnter;
   final Future<void> Function() onBackspaceEmpty;
-  final Future<void> Function(int cursor, String text)? onBackspaceMerge;
   final VoidCallback onIndent;
   final VoidCallback onOutdent;
   final VoidCallback? onLongPress;
@@ -36,9 +36,9 @@ class NodeRow extends StatefulWidget {
     required this.onNavigate,
     required this.onCommit,
     required this.onChanged,
+    this.onBlur,
     required this.onEnter,
     required this.onBackspaceEmpty,
-    this.onBackspaceMerge,
     required this.onIndent,
     required this.onOutdent,
     this.onLongPress,
@@ -95,9 +95,12 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
   void _handleFocusChanged() {
     if (_focusNode.hasFocus) {
       widget.editorSession.markActive(widget.item.node.id);
-    } else if (widget.editorSession.shouldCommitOnBlur(widget.item.node.id) &&
-        _controller.text != widget.item.node.content) {
-      unawaited(widget.onCommit(_controller.text));
+    } else {
+      widget.onBlur?.call(_controller.text);
+      if (widget.editorSession.shouldCommitOnBlur(widget.item.node.id) &&
+          _controller.text != widget.item.node.content) {
+        unawaited(widget.onCommit(_controller.text));
+      }
     }
   }
 
@@ -140,16 +143,9 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyDownEvent) {
       if (event.logicalKey == LogicalKeyboardKey.backspace) {
+        // Spec 17: Backspace only deletes empty node and focuses previous
         if (_controller.text.trim().isEmpty) {
           unawaited(widget.onBackspaceEmpty());
-          return KeyEventResult.handled;
-        }
-        final selection = _controller.selection;
-        if (selection.isValid &&
-            selection.isCollapsed &&
-            selection.baseOffset == 0 &&
-            widget.onBackspaceMerge != null) {
-          unawaited(widget.onBackspaceMerge!(0, _controller.text));
           return KeyEventResult.handled;
         }
       } else if (event.logicalKey == LogicalKeyboardKey.enter ||
@@ -259,6 +255,9 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    // Spec 36:
+    // Level 1: font 17sp, min height 54dp, left margin 20dp, right margin 14dp
+    // Level 2: font 17sp, min height 52dp, left margin 44dp, right margin 14dp
     final isL1 = widget.item.level == 1;
     final minHeight = isL1 ? 54.0 : 52.0;
     const horizontalMargin = 8.0;
@@ -306,6 +305,11 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
       );
     }
 
+    // Spec 8: Chevron only in Selected state.
+    // Spec 5: In Normal state text enjoys full width (only right: 14dp).
+    // In Selected state, text has right padding (44dp) to avoid overlapping Chevron.
+    final rightPadding = widget.isSelected && !widget.isEditing ? 44.0 : 14.0;
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onHorizontalDragStart: widget.isEditing ? null : _onHorizontalDragStart,
@@ -334,27 +338,40 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
             color: selectionColor,
             borderRadius: BorderRadius.circular(11),
           ),
-          child: Row(
+          child: Stack(
+            alignment: Alignment.centerLeft,
             children: [
-              SizedBox(width: innerLeftPadding),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: content,
+              // Main text content (left edge padding never jumps)
+              Padding(
+                padding: EdgeInsets.only(
+                  left: innerLeftPadding,
+                  right: rightPadding,
+                  top: 12,
+                  bottom: 12,
                 ),
+                child: content,
               ),
-              SizedBox(
-                width: 48,
-                height: minHeight,
-                child: (widget.isSelected && !widget.isEditing)
-                    ? IconButton(
-                        icon: const Icon(Icons.chevron_right, size: 20),
-                        tooltip: 'Open',
+              // Chevron overlay (Spec 8: touch area 48dp, icon right aligned 6dp inside margin 8dp = 14dp from screen edge)
+              if (widget.isSelected && !widget.isEditing)
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: Tooltip(
+                    message: 'Open',
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => unawaited(widget.onNavigate()),
+                      child: Container(
+                        width: 48,
+                        height: minHeight,
+                        alignment: Alignment.centerRight,
                         padding: const EdgeInsets.only(right: 6),
-                        onPressed: () => unawaited(widget.onNavigate()),
-                      )
-                    : null,
-              ),
+                        child: const Icon(Icons.chevron_right, size: 20),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

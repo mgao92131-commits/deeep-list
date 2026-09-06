@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -208,4 +209,104 @@ void main() {
       expect(controller.isNormal, isTrue);
     },
   );
+
+  testWidgets(
+    'Selected + tap blank creates transient node and enters Editing in one tap (Issue 4)',
+    (tester) async {
+      await commands.createNode(parentId: null, content: 'Existing');
+      await pumpApp(tester);
+
+      // Tap on Existing to select it
+      await tester.tap(find.text('Existing'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DeepListApp)),
+      );
+      expect(
+        container.read(nodePageControllerProvider(null)).mode,
+        PageMode.selected,
+      );
+
+      // Single tap on trailing blank area
+      await tester.tap(find.byKey(const ValueKey('blank-area')));
+      await tester.pumpAndSettle();
+
+      // Should immediately create new node and enter Editing in 1 tap!
+      expect(
+        container.read(nodePageControllerProvider(null)).mode,
+        PageMode.editing,
+      );
+      expect(find.byType(TextField), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Horizontal swipe left triggers outdent for Level 2 node and is no-op for Level 1 (Spec 23-24)',
+    (tester) async {
+      final l1 = await commands.createNode(parentId: null, content: 'L1');
+      final l2 = await commands.createNode(parentId: l1.id, content: 'L2');
+      await pumpApp(tester);
+
+      // Swipe left on L2 by -80dp (exceeds -55dp armed threshold)
+      await tester.drag(find.text('L2'), const Offset(-80, 0));
+      await tester.pumpAndSettle();
+
+      // L2 should now be elevated to top level (Level 1)
+      final updatedL2 = await repository.getNode(l2.id);
+      expect(updatedL2!.parentId, isNull);
+
+      // Swipe left on L1 by -80dp -> no-op because L1 cannot outdent
+      await tester.drag(find.text('L1'), const Offset(-80, 0));
+      await tester.pumpAndSettle();
+
+      final updatedL1 = await repository.getNode(l1.id);
+      expect(updatedL1!.parentId, isNull);
+    },
+  );
+
+  testWidgets('Focus blur on empty node deletes it completely (Issue 3)', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+
+    // Tap blank area to create empty node
+    await tester.tap(find.text('点击空白处开始记录'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+    expect(await repository.getChildren(null), hasLength(1));
+
+    // Trigger blur by unfocusing
+    final field = tester.widget<TextField>(find.byType(TextField));
+    field.focusNode!.unfocus();
+    await tester.pumpAndSettle();
+
+    // Empty node must be deleted!
+    expect(await repository.getChildren(null), isEmpty);
+    expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('Non-empty node Backspace at cursor 0 does not merge (Issue 6)', (
+    tester,
+  ) async {
+    final first = await commands.createNode(parentId: null, content: 'ABC');
+    final second = await commands.createNode(parentId: null, content: 'DEF');
+    await pumpApp(tester);
+
+    // Double tap DEF to edit
+    await tester.tap(find.text('DEF'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('DEF'));
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    field.controller!.selection = const TextSelection.collapsed(offset: 0);
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pumpAndSettle();
+
+    // Nodes must remain separate, NOT merged!
+    expect((await repository.getNode(first.id))!.content, 'ABC');
+    expect((await repository.getNode(second.id))!.content, 'DEF');
+    expect(await repository.getChildren(null), hasLength(2));
+  });
 }
