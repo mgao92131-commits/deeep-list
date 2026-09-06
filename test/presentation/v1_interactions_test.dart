@@ -515,7 +515,7 @@ void main() {
   });
 
   testWidgets(
-    'Formal existing node is never deleted due to focus loss or text clearing (Anti-deletion armor)',
+    'Node with confirmed empty text is deleted on editing finish, whether newly created or cleared (Spec)',
     (tester) async {
       final formal = await commands.createNode(parentId: null, content: '正式节点');
       await pumpApp(tester);
@@ -528,17 +528,39 @@ void main() {
 
       expect(find.byType(TextField), findsOneWidget);
 
-      // User clears the text of this existing formal node
-      await tester.enterText(find.byType(TextField), '');
+      // User clears the text of this existing node
+      await tester.enterText(find.byType(TextField), '   ');
       await tester.pumpAndSettle();
 
-      // Tap outside on blank area to trigger blur / finish editing
+      // Tap outside on blank area to trigger finish editing
       await tester.tap(find.byKey(const ValueKey('blank-area')));
       await tester.pumpAndSettle();
 
-      // Formal node MUST NOT be deleted!
+      // Since the actual text was confirmed empty (trimmed), the node is deleted
+      final children = await repository.getChildren(null);
+      expect(children.map((n) => n.id), isNot(contains(formal.id)));
+    },
+  );
+
+  testWidgets(
+    'Node is NEVER deleted if activeText is null (Defensive anti-deletion)',
+    (tester) async {
+      final formal = await commands.createNode(parentId: null, content: '重要数据');
+      await pumpApp(tester);
+
+      // Select formal node
+      await tester.tap(find.text('重要数据'));
+      await tester.pumpAndSettle();
+
+      // In selected mode, tap blank area (which calls _finishActiveEditing)
+      // Since it is not in editing mode, activeText is null
+      await tester.tap(find.byKey(const ValueKey('blank-area')));
+      await tester.pumpAndSettle();
+
+      // The formal node MUST remain intact!
       final children = await repository.getChildren(null);
       expect(children.map((n) => n.id), contains(formal.id));
+      expect(children.map((n) => n.content), contains('重要数据'));
     },
   );
 }

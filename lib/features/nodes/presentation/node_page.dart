@@ -32,7 +32,6 @@ class _NodePageState extends ConsumerState<NodePage>
   late final EditorSession _editorSession;
   final _mutationQueue = _MutationQueue();
   final _structuralCommandsInFlight = <NodeId>{};
-  final _transientEmptyNodeIds = <NodeId>{};
   Timer? _autosaveTimer;
   NodeId? _pendingAutosaveNodeId;
   String? _pendingAutosaveText;
@@ -94,8 +93,8 @@ class _NodePageState extends ConsumerState<NodePage>
   }
 
   // Issue 3: Universal single exit point for editing sessions
-  // Safe empty node cleanup: only delete true transient newly-created empty nodes with confirmed empty text.
-  // Existing formal nodes must never be deleted due to blur, lifecycle pause, or null active text.
+  // Safe empty node cleanup: only delete when activeText is confirmed non-null and trim().isEmpty.
+  // Never delete when activeText == null (state unready, blur race, or controller unavailable).
   Future<bool> _finishActiveEditing({bool discardIfEmpty = true}) async {
     _autosaveTimer?.cancel();
     _autosaveTimer = null;
@@ -108,11 +107,8 @@ class _NodePageState extends ConsumerState<NodePage>
 
     if (activeId != null) {
       final activeText = _editorSession.activeText;
-      final isTransient = _transientEmptyNodeIds.contains(activeId);
-      final isConfirmedEmpty = activeText != null && activeText.trim().isEmpty;
 
-      if (isTransient && isConfirmedEmpty && discardIfEmpty) {
-        _transientEmptyNodeIds.remove(activeId);
+      if (activeText != null && activeText.trim().isEmpty && discardIfEmpty) {
         _editorSession.suppressBlurCommit(activeId);
         try {
           await _deleteEmptyNode(activeId);
@@ -180,7 +176,6 @@ class _NodePageState extends ConsumerState<NodePage>
   }
 
   Future<void> _deleteEmptyNode(NodeId nodeId) async {
-    _transientEmptyNodeIds.remove(nodeId);
     _autosaveTimer?.cancel();
     _autosaveTimer = null;
     _pendingAutosaveNodeId = null;
@@ -196,9 +191,6 @@ class _NodePageState extends ConsumerState<NodePage>
   }
 
   void _scheduleAutosave(NodeId nodeId, String text) {
-    if (text.trim().isNotEmpty) {
-      _transientEmptyNodeIds.remove(nodeId);
-    }
     _pendingAutosaveNodeId = nodeId;
     _pendingAutosaveText = text;
     _autosaveTimer?.cancel();
@@ -335,10 +327,6 @@ class _NodePageState extends ConsumerState<NodePage>
       }
       if (!mounted) return;
 
-      if (cursor == text.length) {
-        _transientEmptyNodeIds.add(result.newNodeId);
-      }
-
       ref
           .read(nodePageControllerProvider(widget.parentId).notifier)
           .startEditing(result.newNodeId);
@@ -439,7 +427,6 @@ class _NodePageState extends ConsumerState<NodePage>
           .createNode(parentId: widget.parentId, content: ''),
     );
     if (node == null || !mounted) return;
-    _transientEmptyNodeIds.add(node.id);
     ref
         .read(nodePageControllerProvider(widget.parentId).notifier)
         .startEditing(node.id);
