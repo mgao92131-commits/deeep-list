@@ -563,4 +563,85 @@ void main() {
       expect(children.map((n) => n.content), contains('重要数据'));
     },
   );
+
+  testWidgets(
+    'Keyboard dismissal immediately finishes editing and unfocuses node',
+    (tester) async {
+      await commands.createNode(parentId: null, content: '正在编辑');
+      await pumpApp(tester);
+
+      // Double tap to enter editing
+      await tester.tap(find.text('正在编辑'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('正在编辑'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DeepListApp)),
+      );
+      expect(
+        container.read(nodePageControllerProvider(null)).mode,
+        PageMode.editing,
+      );
+
+      // Simulate keyboard opening (bottom inset becomes 300)
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pump();
+
+      // Edit text
+      await tester.enterText(find.byType(TextField), '已经修改');
+      await tester.pump();
+
+      // Simulate system keyboard dismissal (bottom inset drops to 0)
+      tester.view.resetViewInsets();
+      await tester.pumpAndSettle();
+
+      // Editing must be finished!
+      expect(
+        container.read(nodePageControllerProvider(null)).mode,
+        PageMode.normal,
+      );
+      expect(find.byType(TextField), findsNothing);
+
+      // Modified text must be persisted
+      final nodes = await repository.getChildren(null);
+      expect(nodes.first.content, '已经修改');
+    },
+  );
+
+  testWidgets(
+    'Keyboard dismissal on empty node finishes editing and deletes the empty node',
+    (tester) async {
+      await pumpApp(tester);
+
+      // Tap blank area to create empty node and start editing
+      await tester.tap(find.text('点击空白处开始记录'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DeepListApp)),
+      );
+      expect(
+        container.read(nodePageControllerProvider(null)).mode,
+        PageMode.editing,
+      );
+      expect(await repository.getChildren(null), hasLength(1));
+
+      // Simulate keyboard opening
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pump();
+
+      // Simulate keyboard dismissal without typing anything
+      tester.view.resetViewInsets();
+      await tester.pumpAndSettle();
+
+      // Empty node must be cleaned up, and mode returns to normal!
+      expect(
+        container.read(nodePageControllerProvider(null)).mode,
+        PageMode.normal,
+      );
+      expect(await repository.getChildren(null), isEmpty);
+      expect(find.byType(TextField), findsNothing);
+    },
+  );
 }

@@ -36,6 +36,7 @@ class _NodePageState extends ConsumerState<NodePage>
   NodeId? _pendingAutosaveNodeId;
   String? _pendingAutosaveText;
   Future<bool>? _autosaveInFlight;
+  double _lastBottomInset = 0.0;
   bool _routeSubscribed = false;
 
   @override
@@ -48,6 +49,12 @@ class _NodePageState extends ConsumerState<NodePage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final view =
+        View.maybeOf(context) ??
+        WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
+    if (view != null) {
+      _lastBottomInset = view.viewInsets.bottom / view.devicePixelRatio;
+    }
     if (_routeSubscribed) return;
     final route = ModalRoute.of(context);
     if (route is PageRoute<dynamic>) {
@@ -79,6 +86,32 @@ class _NodePageState extends ConsumerState<NodePage>
         state == AppLifecycleState.detached) {
       unawaited(_finishActiveEditing(discardIfEmpty: true));
     }
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    final view =
+        View.maybeOf(context) ??
+        WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
+    if (view == null) return;
+
+    final bottomInset = view.viewInsets.bottom / view.devicePixelRatio;
+    final keyboardWasVisible = _lastBottomInset > 0;
+    final keyboardIsVisible = bottomInset > 0;
+
+    if (keyboardWasVisible && !keyboardIsVisible) {
+      if (mounted) {
+        final currentMode = ref
+            .read(nodePageControllerProvider(widget.parentId))
+            .mode;
+        if (currentMode == PageMode.editing) {
+          unawaited(_finishActiveEditing(discardIfEmpty: true));
+        }
+      }
+    }
+
+    _lastBottomInset = bottomInset;
   }
 
   @override
