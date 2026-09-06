@@ -310,69 +310,77 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
         ? 40.0
         : (14.0 - horizontalMargin);
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onHorizontalDragStart: widget.isEditing ? null : _onHorizontalDragStart,
-      onHorizontalDragUpdate: widget.isEditing ? null : _onHorizontalDragUpdate,
-      onHorizontalDragEnd: widget.isEditing ? null : _onHorizontalDragEnd,
-      onHorizontalDragCancel: widget.isEditing ? null : _onHorizontalDragCancel,
-      onLongPress: widget.isEditing ? null : widget.onLongPress,
-      onTap: () {
-        if (widget.isEditing) return;
-        if (widget.isSelected) {
-          widget.onStartEditing();
-        } else {
-          widget.onSelect();
-        }
-      },
-      child: Transform.translate(
-        offset: Offset(_dragOffset, 0),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          margin: const EdgeInsets.symmetric(
-            horizontal: horizontalMargin,
-            vertical: 2,
-          ),
-          constraints: BoxConstraints(minHeight: minHeight),
-          decoration: BoxDecoration(
-            color: selectionColor,
-            borderRadius: BorderRadius.circular(11),
-          ),
-          child: Stack(
-            alignment: Alignment.centerLeft,
-            children: [
-              // Main text content (left edge padding never jumps)
-              Padding(
-                padding: EdgeInsets.only(
-                  left: innerLeftPadding,
-                  right: rightPadding,
-                  top: 12,
-                  bottom: 12,
+    return SizedBox(
+      width: double.infinity,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragStart: widget.isEditing ? null : _onHorizontalDragStart,
+        onHorizontalDragUpdate: widget.isEditing
+            ? null
+            : _onHorizontalDragUpdate,
+        onHorizontalDragEnd: widget.isEditing ? null : _onHorizontalDragEnd,
+        onHorizontalDragCancel: widget.isEditing
+            ? null
+            : _onHorizontalDragCancel,
+        onLongPress: widget.isEditing ? null : widget.onLongPress,
+        onTap: () {
+          if (widget.isEditing) return;
+          if (widget.isSelected) {
+            widget.onStartEditing();
+          } else {
+            widget.onSelect();
+          }
+        },
+        child: Transform.translate(
+          offset: Offset(_dragOffset, 0),
+          child: AnimatedContainer(
+            width: double.infinity,
+            duration: const Duration(milliseconds: 140),
+            margin: const EdgeInsets.symmetric(
+              horizontal: horizontalMargin,
+              vertical: 2,
+            ),
+            constraints: BoxConstraints(minHeight: minHeight),
+            decoration: BoxDecoration(
+              color: selectionColor,
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Stack(
+              alignment: Alignment.centerLeft,
+              children: [
+                // Main text content (left edge padding never jumps)
+                Padding(
+                  padding: EdgeInsets.only(
+                    left: innerLeftPadding,
+                    right: rightPadding,
+                    top: 12,
+                    bottom: 12,
+                  ),
+                  child: content,
                 ),
-                child: content,
-              ),
-              // Chevron overlay (Spec 8: touch area 48dp, icon right aligned 6dp inside margin 8dp = 14dp from screen edge)
-              if (widget.isSelected && !widget.isEditing)
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  child: Tooltip(
-                    message: 'Open',
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => unawaited(widget.onNavigate()),
-                      child: Container(
-                        width: 48,
-                        height: minHeight,
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.only(right: 6),
-                        child: const Icon(Icons.chevron_right, size: 20),
+                // Chevron overlay (Spec 8: touch area 48dp, icon right aligned 6dp inside margin 8dp = 14dp from screen edge)
+                if (widget.isSelected && !widget.isEditing)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: Tooltip(
+                      message: 'Open',
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => unawaited(widget.onNavigate()),
+                        child: Container(
+                          width: 48,
+                          height: minHeight,
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 6),
+                          child: const Icon(Icons.chevron_right, size: 20),
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

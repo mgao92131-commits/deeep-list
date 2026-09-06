@@ -8,6 +8,7 @@ import 'package:deep_list/app/app.dart';
 import 'package:deep_list/app/providers.dart';
 import 'package:deep_list/features/nodes/application/node_page_controller.dart';
 import 'package:deep_list/features/nodes/application/tree_command_service.dart';
+import 'package:deep_list/features/nodes/presentation/widgets/node_row.dart';
 
 import '../helpers/memory_node_repository.dart';
 
@@ -396,6 +397,77 @@ void main() {
       for (final child in children) {
         expect(child.parentId, parent.id);
       }
+    },
+  );
+
+  testWidgets(
+    'NodeRow width fills available list width for both short and long text (P0 Layout)',
+    (tester) async {
+      final shortNode = await commands.createNode(parentId: null, content: '短');
+      final longNode = await commands.createNode(
+        parentId: null,
+        content: '这是一个非常长的一级节点文本用于验证组件绝对不会退化为根据文本内容自适应宽度导致被居中或卡片化',
+      );
+      await commands.createNode(parentId: shortNode.id, content: '二级节点');
+      await pumpApp(tester);
+
+      final screenWidth = tester.getSize(find.byType(DeepListApp)).width;
+
+      // Find all NodeRows
+      final nodeRowFinders = find.byType(NodeRow);
+      expect(nodeRowFinders, findsNWidgets(3));
+
+      // 1. Every NodeRow must span the entire screen width
+      for (var i = 0; i < 3; i++) {
+        final rowSize = tester.getSize(nodeRowFinders.at(i));
+        expect(rowSize.width, screenWidth);
+      }
+
+      // 2. The AnimatedContainer inside each NodeRow spans screenWidth, and its inner content (Stack)
+      // spans screenWidth - 16 (due to 8dp margin on each side)
+      final animatedContainers = find.descendant(
+        of: nodeRowFinders,
+        matching: find.byType(AnimatedContainer),
+      );
+      for (var i = 0; i < 3; i++) {
+        final containerSize = tester.getSize(animatedContainers.at(i));
+        expect(containerSize.width, screenWidth);
+        final stackFinder = find.descendant(
+          of: animatedContainers.at(i),
+          matching: find.byType(Stack),
+        );
+        expect(tester.getSize(stackFinder).width, screenWidth - 16.0);
+        expect(tester.getTopLeft(stackFinder).dx, 8.0);
+      }
+
+      // 3. Text start x coordinates:
+      // Level 1: 8dp margin + 12dp innerLeftPadding = 20.0
+      // Level 2: 8dp margin + 36dp innerLeftPadding = 44.0
+      final shortTextPos = tester.getTopLeft(find.text('短'));
+      final longTextPos = tester.getTopLeft(find.text(longNode.content));
+      final childTextPos = tester.getTopLeft(find.text('二级节点'));
+      expect(shortTextPos.dx, 20.0);
+      expect(longTextPos.dx, 20.0);
+      expect(childTextPos.dx, 44.0);
+
+      // 4. In Selected state:
+      // Tap short node '短'
+      await tester.tap(find.text('短'));
+      await tester.pumpAndSettle();
+
+      // The selected surface (Stack) still spans screenWidth - 16
+      final selectedStack = find.descendant(
+        of: nodeRowFinders.at(0),
+        matching: find.byType(Stack),
+      );
+      expect(tester.getSize(selectedStack).width, screenWidth - 16.0);
+
+      // The Chevron icon is anchored to the right edge of the screen:
+      // Container right edge is at screenWidth - 8. Icon right edge is at screenWidth - 8 - 6 = screenWidth - 14.
+      final chevronFinder = find.byIcon(Icons.chevron_right);
+      expect(chevronFinder, findsOneWidget);
+      final chevronTopRight = tester.getTopRight(chevronFinder);
+      expect(chevronTopRight.dx, screenWidth - 14.0);
     },
   );
 }

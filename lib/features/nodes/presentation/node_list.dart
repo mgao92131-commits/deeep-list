@@ -126,6 +126,7 @@ class NodeList extends StatelessWidget {
                 key: ValueKey(parentItem.id),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // Level 1 Row (Listener strictly scoped to Level 1 row only)
                     ReorderableDelayedDragStartListener(
