@@ -10,7 +10,6 @@ class NodeRow extends StatefulWidget {
   final VisibleNodeItem item;
   final bool isSelected;
   final bool isEditing;
-  final bool isDragging;
   final EditorSession editorSession;
   final VoidCallback onSelect;
   final VoidCallback onStartEditing;
@@ -29,7 +28,6 @@ class NodeRow extends StatefulWidget {
     required this.item,
     required this.isSelected,
     required this.isEditing,
-    this.isDragging = false,
     required this.editorSession,
     required this.onSelect,
     required this.onStartEditing,
@@ -306,9 +304,11 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
     }
 
     // Spec 8: Chevron only in Selected state.
-    // Spec 5: In Normal state text enjoys full width (only right: 14dp).
-    // In Selected state, text has right padding (44dp) to avoid overlapping Chevron.
-    final rightPadding = widget.isSelected && !widget.isEditing ? 44.0 : 14.0;
+    // Spec 5: In Normal state text enjoys full width (14dp from screen edge -> 6dp inside 8dp margin).
+    // In Selected state, text has right padding (40dp) to avoid overlapping Chevron.
+    final rightPadding = widget.isSelected && !widget.isEditing
+        ? 40.0
+        : (14.0 - horizontalMargin);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -309,4 +310,92 @@ void main() {
     expect((await repository.getNode(second.id))!.content, 'DEF');
     expect(await repository.getChildren(null), hasLength(2));
   });
+
+  Future<void> longPressDrag(
+    WidgetTester tester,
+    Finder startFinder,
+    Finder endFinder,
+  ) async {
+    final start = tester.getCenter(startFinder);
+    final end = tester.getCenter(endFinder);
+    final gesture = await tester.startGesture(start);
+    await tester.pump(kLongPressTimeout + kPressTimeout);
+    await gesture.moveTo(end);
+    await tester.pump(kPressTimeout);
+    await gesture.up();
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('Level 1 downward drag reorder: A B C -> B A C', (tester) async {
+    await commands.createNode(parentId: null, content: 'A');
+    await commands.createNode(parentId: null, content: 'B');
+    await commands.createNode(parentId: null, content: 'C');
+    await pumpApp(tester);
+
+    // Long press A and drag downward to C to place after B
+    await longPressDrag(tester, find.text('A'), find.text('C'));
+
+    final children = await repository.getChildren(null);
+    expect(children.map((n) => n.content).toList(), ['B', 'A', 'C']);
+  });
+
+  testWidgets('Level 1 upward drag reorder: A B C -> A C B', (tester) async {
+    await commands.createNode(parentId: null, content: 'A');
+    await commands.createNode(parentId: null, content: 'B');
+    await commands.createNode(parentId: null, content: 'C');
+    await pumpApp(tester);
+
+    // Long press C and drag upward to B to place between A and B
+    await longPressDrag(tester, find.text('C'), find.text('B'));
+
+    final children = await repository.getChildren(null);
+    expect(children.map((n) => n.content).toList(), ['A', 'C', 'B']);
+  });
+
+  testWidgets(
+    'Level 2 downward drag reorder within parent: A1 A2 A3 -> A2 A1 A3',
+    (tester) async {
+      final parent = await commands.createNode(
+        parentId: null,
+        content: 'Parent',
+      );
+      await commands.createNode(parentId: parent.id, content: 'A1');
+      await commands.createNode(parentId: parent.id, content: 'A2');
+      await commands.createNode(parentId: parent.id, content: 'A3');
+      await pumpApp(tester);
+
+      // Long press A1 and drag downward to A3 to place after A2
+      await longPressDrag(tester, find.text('A1'), find.text('A3'));
+
+      final children = await repository.getChildren(parent.id);
+      expect(children.map((n) => n.content).toList(), ['A2', 'A1', 'A3']);
+      // All children still have parent.id
+      for (final child in children) {
+        expect(child.parentId, parent.id);
+      }
+    },
+  );
+
+  testWidgets(
+    'Level 2 upward drag reorder within parent: A1 A2 A3 -> A1 A3 A2',
+    (tester) async {
+      final parent = await commands.createNode(
+        parentId: null,
+        content: 'Parent',
+      );
+      await commands.createNode(parentId: parent.id, content: 'A1');
+      await commands.createNode(parentId: parent.id, content: 'A2');
+      await commands.createNode(parentId: parent.id, content: 'A3');
+      await pumpApp(tester);
+
+      // Long press A3 and drag upward to A2 to place between A1 and A2
+      await longPressDrag(tester, find.text('A3'), find.text('A2'));
+
+      final children = await repository.getChildren(parent.id);
+      expect(children.map((n) => n.content).toList(), ['A1', 'A3', 'A2']);
+      for (final child in children) {
+        expect(child.parentId, parent.id);
+      }
+    },
+  );
 }

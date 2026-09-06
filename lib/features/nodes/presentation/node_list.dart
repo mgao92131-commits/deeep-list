@@ -53,17 +53,12 @@ class NodeList extends StatelessWidget {
 
   void _handleLevel1Reorder(int oldIndex, int newIndex) {
     if (oldIndex < 0 || oldIndex >= tree.groups.length) return;
-    if (newIndex < 0 || newIndex > tree.groups.length) return;
+    if (newIndex < 0 || newIndex >= tree.groups.length) return;
+    if (oldIndex == newIndex) return;
 
     final l1Ids = tree.groups.map((g) => g.parent.id).toList();
-    var targetIndex = newIndex;
-    if (oldIndex < targetIndex) {
-      targetIndex -= 1;
-    }
-    if (oldIndex == targetIndex) return;
-
     final moved = l1Ids.removeAt(oldIndex);
-    l1Ids.insert(targetIndex, moved);
+    l1Ids.insert(newIndex, moved);
 
     final parentId = tree.groups.first.parent.parentId;
     unawaited(onReorderSiblings(parentId, l1Ids));
@@ -76,17 +71,12 @@ class NodeList extends StatelessWidget {
     int newIndex,
   ) {
     if (oldIndex < 0 || oldIndex >= currentChildIds.length) return;
-    if (newIndex < 0 || newIndex > currentChildIds.length) return;
+    if (newIndex < 0 || newIndex >= currentChildIds.length) return;
+    if (oldIndex == newIndex) return;
 
     final reordered = [...currentChildIds];
-    var targetIndex = newIndex;
-    if (oldIndex < targetIndex) {
-      targetIndex -= 1;
-    }
-    if (oldIndex == targetIndex) return;
-
     final moved = reordered.removeAt(oldIndex);
-    reordered.insert(targetIndex, moved);
+    reordered.insert(newIndex, moved);
 
     unawaited(onReorderSiblings(parentId, reordered));
   }
@@ -132,30 +122,33 @@ class NodeList extends StatelessWidget {
               final parentItem = group.parent;
               final children = group.children;
 
-              return ReorderableDelayedDragStartListener(
+              return KeyedSubtree(
                 key: ValueKey(parentItem.id),
-                index: index,
-                enabled: editingNodeId == null,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Level 1 Row
-                    NodeRow(
-                      item: parentItem,
-                      isSelected: selectedNodeId == parentItem.id,
-                      isEditing: editingNodeId == parentItem.id,
-                      editorSession: editorSession,
-                      onSelect: () => onSelect(parentItem.id),
-                      onStartEditing: () => onStartEditing(parentItem.node),
-                      onNavigate: () => onNavigate(parentItem.node),
-                      onCommit: (text) => onCommit(parentItem.id, text),
-                      onChanged: (text) => onChanged(parentItem.node, text),
-                      onBlur: onBlur,
-                      onEnter: (cursor, text) =>
-                          onEnter(parentItem.node, cursor, text),
-                      onBackspaceEmpty: () => onBackspaceEmpty(parentItem.node),
-                      onIndent: () => onIndent(parentItem.id),
-                      onOutdent: () => onOutdent(parentItem.id),
+                    // Level 1 Row (Listener strictly scoped to Level 1 row only)
+                    ReorderableDelayedDragStartListener(
+                      index: index,
+                      enabled: editingNodeId == null,
+                      child: NodeRow(
+                        item: parentItem,
+                        isSelected: selectedNodeId == parentItem.id,
+                        isEditing: editingNodeId == parentItem.id,
+                        editorSession: editorSession,
+                        onSelect: () => onSelect(parentItem.id),
+                        onStartEditing: () => onStartEditing(parentItem.node),
+                        onNavigate: () => onNavigate(parentItem.node),
+                        onCommit: (text) => onCommit(parentItem.id, text),
+                        onChanged: (text) => onChanged(parentItem.node, text),
+                        onBlur: onBlur,
+                        onEnter: (cursor, text) =>
+                            onEnter(parentItem.node, cursor, text),
+                        onBackspaceEmpty: () =>
+                            onBackspaceEmpty(parentItem.node),
+                        onIndent: () => onIndent(parentItem.id),
+                        onOutdent: () => onOutdent(parentItem.id),
+                      ),
                     ),
                     // Level 2 Sub-list (Scoped strictly to this parent - Sibling Drag Boundary)
                     if (children.isNotEmpty)
