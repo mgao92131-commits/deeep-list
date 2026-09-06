@@ -470,4 +470,75 @@ void main() {
       expect(chevronTopRight.dx, screenWidth - 14.0);
     },
   );
+
+  testWidgets(
+    'Light divider in Normal state follows level indent (20dp for L1, 44dp for L2) and hides in Selected',
+    (tester) async {
+      final l1 = await commands.createNode(parentId: null, content: '工作');
+      await commands.createNode(parentId: l1.id, content: 'DeepList');
+      await pumpApp(tester);
+
+      // Normal state: 2 dividers for 2 nodes
+      final dividers = tester
+          .widgetList<Divider>(find.byType(Divider))
+          .toList();
+      expect(dividers, hasLength(2));
+
+      // Level 1 divider starts at 20.0, Level 2 divider starts at 44.0
+      expect(dividers[0].indent, 20.0);
+      expect(dividers[0].endIndent, 0.0);
+      expect(dividers[1].indent, 44.0);
+      expect(dividers[1].endIndent, 0.0);
+
+      // Tap L1 node to enter Selected state
+      await tester.tap(find.text('工作'));
+      await tester.pumpAndSettle();
+
+      // Selected node hides its divider -> only 1 divider remaining (Level 2)
+      final remainingDividers = tester
+          .widgetList<Divider>(find.byType(Divider))
+          .toList();
+      expect(remainingDividers, hasLength(1));
+      expect(remainingDividers[0].indent, 44.0);
+    },
+  );
+
+  testWidgets('New empty node displays placeholder "输入内容…"', (tester) async {
+    await pumpApp(tester);
+
+    // Tap blank area to create transient empty node
+    await tester.tap(find.text('点击空白处开始记录'));
+    await tester.pumpAndSettle();
+
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.decoration?.hintText, '输入内容…');
+  });
+
+  testWidgets(
+    'Formal existing node is never deleted due to focus loss or text clearing (Anti-deletion armor)',
+    (tester) async {
+      final formal = await commands.createNode(parentId: null, content: '正式节点');
+      await pumpApp(tester);
+
+      // 1st tap: select, 2nd tap: enter editing
+      await tester.tap(find.text('正式节点'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('正式节点'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsOneWidget);
+
+      // User clears the text of this existing formal node
+      await tester.enterText(find.byType(TextField), '');
+      await tester.pumpAndSettle();
+
+      // Tap outside on blank area to trigger blur / finish editing
+      await tester.tap(find.byKey(const ValueKey('blank-area')));
+      await tester.pumpAndSettle();
+
+      // Formal node MUST NOT be deleted!
+      final children = await repository.getChildren(null);
+      expect(children.map((n) => n.id), contains(formal.id));
+    },
+  );
 }

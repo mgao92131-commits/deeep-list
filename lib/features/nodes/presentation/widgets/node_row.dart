@@ -285,19 +285,29 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
         maxLines: 1,
         textInputAction: TextInputAction.next,
         style: textStyle,
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           border: InputBorder.none,
           isDense: true,
           contentPadding: EdgeInsets.zero,
-          hintText: '',
+          hintText: '输入内容…',
+          hintStyle: textStyle.copyWith(
+            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45),
+          ),
         ),
         onChanged: widget.onChanged,
         onSubmitted: (_) => _submitEnter(),
       );
     } else {
+      final isTextEmpty = widget.item.content.isEmpty;
       content = Text(
-        widget.item.content,
-        style: textStyle,
+        isTextEmpty ? '输入内容…' : widget.item.content,
+        style: isTextEmpty
+            ? textStyle.copyWith(
+                color: theme.colorScheme.onSurfaceVariant.withValues(
+                  alpha: 0.45,
+                ),
+              )
+            : textStyle,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       );
@@ -309,6 +319,8 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
     final rightPadding = widget.isSelected && !widget.isEditing
         ? 40.0
         : (14.0 - horizontalMargin);
+
+    final dividerIndent = isL1 ? 20.0 : 44.0;
 
     return SizedBox(
       width: double.infinity,
@@ -331,57 +343,72 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
             widget.onSelect();
           }
         },
-        child: Transform.translate(
-          offset: Offset(_dragOffset, 0),
-          child: AnimatedContainer(
-            width: double.infinity,
-            duration: const Duration(milliseconds: 140),
-            margin: const EdgeInsets.symmetric(
-              horizontal: horizontalMargin,
-              vertical: 2,
-            ),
-            constraints: BoxConstraints(minHeight: minHeight),
-            decoration: BoxDecoration(
-              color: selectionColor,
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: Stack(
-              alignment: Alignment.centerLeft,
-              children: [
-                // Main text content (left edge padding never jumps)
-                Padding(
-                  padding: EdgeInsets.only(
-                    left: innerLeftPadding,
-                    right: rightPadding,
-                    top: 12,
-                    bottom: 12,
-                  ),
-                  child: content,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Transform.translate(
+              offset: Offset(_dragOffset, 0),
+              child: AnimatedContainer(
+                width: double.infinity,
+                duration: const Duration(milliseconds: 140),
+                margin: const EdgeInsets.symmetric(
+                  horizontal: horizontalMargin,
+                  vertical: 2,
                 ),
-                // Chevron overlay (Spec 8: touch area 48dp, icon right aligned 6dp inside margin 8dp = 14dp from screen edge)
-                if (widget.isSelected && !widget.isEditing)
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    bottom: 0,
-                    child: Tooltip(
-                      message: 'Open',
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => unawaited(widget.onNavigate()),
-                        child: Container(
-                          width: 48,
-                          height: minHeight,
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.only(right: 6),
-                          child: const Icon(Icons.chevron_right, size: 20),
+                constraints: BoxConstraints(minHeight: minHeight),
+                decoration: BoxDecoration(
+                  color: selectionColor,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Stack(
+                  alignment: Alignment.centerLeft,
+                  children: [
+                    // Main text content (left edge padding never jumps)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        left: innerLeftPadding,
+                        right: rightPadding,
+                        top: 12,
+                        bottom: 12,
+                      ),
+                      child: content,
+                    ),
+                    // Chevron overlay (Spec 8: touch area 48dp, icon right aligned 6dp inside margin 8dp = 14dp from screen edge)
+                    if (widget.isSelected && !widget.isEditing)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        bottom: 0,
+                        child: Tooltip(
+                          message: 'Open',
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => unawaited(widget.onNavigate()),
+                            child: Container(
+                              width: 48,
+                              height: minHeight,
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 6),
+                              child: const Icon(Icons.chevron_right, size: 20),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-              ],
+                  ],
+                ),
+              ),
             ),
-          ),
+            // Light divider in Normal (non-selected) state with level-aware indent
+            if (!widget.isSelected)
+              Divider(
+                height: 1,
+                thickness: 0.8,
+                indent: dividerIndent,
+                endIndent: 0,
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+              ),
+          ],
         ),
       ),
     );
