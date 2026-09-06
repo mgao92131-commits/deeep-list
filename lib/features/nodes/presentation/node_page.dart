@@ -38,6 +38,8 @@ class _NodePageState extends ConsumerState<NodePage>
   Future<bool>? _autosaveInFlight;
   double _lastBottomInset = 0.0;
   bool _routeSubscribed = false;
+  bool _isHandlingEnter = false;
+  Timer? _enterProtectionTimer;
 
   @override
   void initState() {
@@ -101,6 +103,10 @@ class _NodePageState extends ConsumerState<NodePage>
     final keyboardIsVisible = bottomInset > 0;
 
     if (keyboardWasVisible && !keyboardIsVisible) {
+      if (_isHandlingEnter) {
+        _lastBottomInset = bottomInset;
+        return;
+      }
       if (mounted) {
         final currentMode = ref
             .read(nodePageControllerProvider(widget.parentId))
@@ -118,6 +124,7 @@ class _NodePageState extends ConsumerState<NodePage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _autosaveTimer?.cancel();
+    _enterProtectionTimer?.cancel();
     if (_routeSubscribed) {
       routeObserver.unsubscribe(this);
     }
@@ -129,6 +136,7 @@ class _NodePageState extends ConsumerState<NodePage>
   // Safe empty node cleanup: only delete when activeText is confirmed non-null and trim().isEmpty.
   // Never delete when activeText == null (state unready, blur race, or controller unavailable).
   Future<bool> _finishActiveEditing({bool discardIfEmpty = true}) async {
+    if (_isHandlingEnter) return false;
     _autosaveTimer?.cancel();
     _autosaveTimer = null;
     _pendingAutosaveNodeId = null;
@@ -215,9 +223,13 @@ class _NodePageState extends ConsumerState<NodePage>
     _pendingAutosaveText = null;
     _editorSession.suppressBlurCommit(nodeId);
     try {
-      await _runMutation(
+      await _mutationQueue.add(
         () => ref.read(treeCommandServiceProvider).deleteSubtree(nodeId),
       );
+    } catch (error) {
+      if (error is! StateError || !error.message.contains('does not exist')) {
+        _showMutationError(error);
+      }
     } finally {
       _editorSession.allowBlurCommit(nodeId);
     }
@@ -333,22 +345,26 @@ class _NodePageState extends ConsumerState<NodePage>
   // Spec 12 & 14: Enter rules
   Future<void> _handleEnter(Node node, int cursor, String text) async {
     if (!_structuralCommandsInFlight.add(node.id)) return;
+    _isHandlingEnter = true;
+    _enterProtectionTimer?.cancel();
     _editorSession.suppressBlurCommit(node.id);
+    var handoverScheduled = false;
     try {
       await _drainAutosaveForStructuralCommand();
 
-      // Spec 14: Node 为空 -> 删除当前空 Node
+      // 空节点按 Enter: 单一职责，先解焦退回 Normal 状态，再安全执行单次删除
       if (text.trim().isEmpty) {
-        await _deleteEmptyNode(node.id);
+        _editorSession.unfocus();
         if (mounted) {
           ref
               .read(nodePageControllerProvider(widget.parentId).notifier)
               .toNormal();
         }
+        await _deleteEmptyNode(node.id);
         return;
       }
 
-      // 非空节点按 Enter: 保存当前完整文本，在正下方创建空同级节点，焦点进入新节点
+      // 非空节点按 Enter: 保存当前完整文本，在正下方创建空同级节点，焦点无缝转移到新节点
       await _saveContent(node.id, text);
       final newNode = await _runMutation(
         () => ref
@@ -365,9 +381,23 @@ class _NodePageState extends ConsumerState<NodePage>
           .read(nodePageControllerProvider(widget.parentId).notifier)
           .startEditing(newNode.id);
       _editorSession.focus(newNode.id, cursor: 0);
+
+      handoverScheduled = true;
+      _enterProtectionTimer = Timer(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          _isHandlingEnter = false;
+        }
+      });
     } finally {
       _editorSession.allowBlurCommit(node.id);
       _structuralCommandsInFlight.remove(node.id);
+      if (!handoverScheduled) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _isHandlingEnter = false;
+          }
+        });
+      }
     }
   }
 
@@ -576,6 +606,7 @@ class _NodePageState extends ConsumerState<NodePage>
                     onCommit: _commit,
                     onChanged: (node, text) => _scheduleAutosave(node.id, text),
                     onBlur: (text) {
+                      if (_isHandlingEnter) return;
                       if (text.trim().isEmpty) {
                         unawaited(_finishActiveEditing(discardIfEmpty: true));
                       }

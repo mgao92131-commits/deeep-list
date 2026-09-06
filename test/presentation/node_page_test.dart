@@ -89,7 +89,7 @@ void main() {
     await tester.tap(find.text('点击空白处开始记录'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'HelloWorld');
-    await tester.testTextInput.receiveAction(TextInputAction.next);
+    await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
 
     final nodes = await repository.getChildren(null);
@@ -110,7 +110,7 @@ void main() {
     expect(await repository.getChildren(null), hasLength(2));
 
     // Press enter on empty node
-    await tester.testTextInput.receiveAction(TextInputAction.next);
+    await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
 
     // Empty node should be deleted
@@ -133,7 +133,7 @@ void main() {
 
       final field = tester.widget<TextField>(find.byType(TextField));
       field.controller!.selection = const TextSelection.collapsed(offset: 5);
-      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
 
       expect((await repository.getChildren(null)).map((node) => node.content), [
@@ -160,7 +160,7 @@ void main() {
 
       final field = tester.widget<TextField>(find.byType(TextField));
       field.controller!.selection = const TextSelection.collapsed(offset: 0);
-      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
 
       expect((await repository.getChildren(null)).map((node) => node.content), [
@@ -187,7 +187,7 @@ void main() {
 
       final field = tester.widget<TextField>(find.byType(TextField));
       field.controller!.selection = const TextSelection.collapsed(offset: 10);
-      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
 
       expect((await repository.getChildren(null)).map((node) => node.content), [

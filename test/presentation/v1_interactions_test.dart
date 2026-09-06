@@ -674,4 +674,90 @@ void main() {
       expect(textField.maxLines, isNull);
     },
   );
+
+  testWidgets(
+    'Non-empty node Enter: newly created empty node persists and maintains focus across keyboard jitter',
+    (tester) async {
+      await commands.createNode(parentId: null, content: 'NonEmpty');
+      await pumpApp(tester);
+
+      // Simulate keyboard open
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pump();
+
+      // Enter editing
+      await tester.tap(find.text('NonEmpty'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('NonEmpty'));
+      await tester.pumpAndSettle();
+
+      // Press Enter
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+
+      // Simulate keyboard fluctuation/metrics jitter during focus transition
+      tester.view.viewInsets = const FakeViewPadding(bottom: 0);
+      await tester.pump();
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pumpAndSettle();
+
+      // Both original and new empty node must persist in the tree!
+      final nodes = await repository.getChildren(null);
+      expect(nodes.map((n) => n.content), ['NonEmpty', '']);
+
+      // New node must remain in editing mode and maintain focus
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DeepListApp)),
+      );
+      expect(
+        container.read(nodePageControllerProvider(null)).mode,
+        PageMode.editing,
+      );
+      final newField = tester.widget<TextField>(find.byType(TextField));
+      expect(newField.focusNode!.hasFocus, isTrue);
+
+      tester.view.resetViewInsets();
+    },
+  );
+
+  testWidgets(
+    'Empty node Enter: safely deleted once, exits editing, and NEVER shows error SnackBar',
+    (tester) async {
+      await pumpApp(tester);
+
+      // Tap blank area to create an empty node and start editing
+      await tester.tap(find.text('点击空白处开始记录'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DeepListApp)),
+      );
+      expect(
+        container.read(nodePageControllerProvider(null)).mode,
+        PageMode.editing,
+      );
+      expect(await repository.getChildren(null), hasLength(1));
+
+      // Simulate keyboard open
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pump();
+
+      // Press Enter on the empty node
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+
+      // Simulate keyboard dismissal concurrently
+      tester.view.resetViewInsets();
+      await tester.pumpAndSettle();
+
+      // Node is safely deleted, mode is normal
+      expect(await repository.getChildren(null), isEmpty);
+      expect(
+        container.read(nodePageControllerProvider(null)).mode,
+        PageMode.normal,
+      );
+
+      // MUST NOT have any error SnackBar!
+      expect(find.byType(SnackBar), findsNothing);
+    },
+  );
 }

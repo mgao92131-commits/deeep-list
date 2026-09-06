@@ -284,7 +284,7 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
         autofocus: false,
         minLines: 1,
         maxLines: null,
-        textInputAction: TextInputAction.next,
+        textInputAction: TextInputAction.done,
         style: textStyle,
         decoration: InputDecoration(
           border: InputBorder.none,
