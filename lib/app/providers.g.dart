@@ -281,3 +281,42 @@ final class ChildrenFamily extends $Family
   @override
   String toString() => r'childrenProvider';
 }
+
+@ProviderFor(childCounts)
+const childCountsProvider = ChildCountsProvider._();
+
+final class ChildCountsProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<Map<NodeId, int>>,
+          Map<NodeId, int>,
+          Stream<Map<NodeId, int>>
+        >
+    with $FutureModifier<Map<NodeId, int>>, $StreamProvider<Map<NodeId, int>> {
+  const ChildCountsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'childCountsProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$childCountsHash();
+
+  @$internal
+  @override
+  $StreamProviderElement<Map<NodeId, int>> $createElement(
+    $ProviderPointer pointer,
+  ) => $StreamProviderElement(pointer);
+
+  @override
+  Stream<Map<NodeId, int>> create(Ref ref) {
+    return childCounts(ref);
+  }
+}
+
+String _$childCountsHash() => r'a07fe53848e2dd8c77bbc4f2525a089581aba9a7';

@@ -7,6 +7,7 @@ class VisibleNodeItem {
   final bool hasPreviousSibling;
   final NodeId? previousSiblingId;
   final bool isLastInParent;
+  final int childCount;
 
   const VisibleNodeItem({
     required this.node,
@@ -14,7 +15,26 @@ class VisibleNodeItem {
     required this.hasPreviousSibling,
     this.previousSiblingId,
     this.isLastInParent = false,
+    this.childCount = 0,
   });
+
+  VisibleNodeItem copyWith({
+    Node? node,
+    NodeId? parentId,
+    bool? hasPreviousSibling,
+    NodeId? previousSiblingId,
+    bool? isLastInParent,
+    int? childCount,
+  }) {
+    return VisibleNodeItem(
+      node: node ?? this.node,
+      parentId: parentId ?? this.parentId,
+      hasPreviousSibling: hasPreviousSibling ?? this.hasPreviousSibling,
+      previousSiblingId: previousSiblingId ?? this.previousSiblingId,
+      isLastInParent: isLastInParent ?? this.isLastInParent,
+      childCount: childCount ?? this.childCount,
+    );
+  }
 
   NodeId get id => node.id;
   String get content => node.content;

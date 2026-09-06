@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -40,6 +41,7 @@ class _NodePageState extends ConsumerState<NodePage>
   bool _routeSubscribed = false;
   bool _isHandlingEnter = false;
   Timer? _enterProtectionTimer;
+  List<NodeId>? _optimisticOrder;
 
   @override
   void initState() {
@@ -488,11 +490,23 @@ class _NodePageState extends ConsumerState<NodePage>
     NodeId? parentId,
     List<NodeId> orderedIds,
   ) async {
-    await _runMutation(
-      () => ref
-          .read(treeCommandServiceProvider)
-          .reorderChildren(parentId: parentId, orderedIds: orderedIds),
-    );
+    setState(() {
+      _optimisticOrder = orderedIds;
+    });
+    try {
+      await _runMutation(
+        () => ref
+            .read(treeCommandServiceProvider)
+            .reorderChildren(parentId: parentId, orderedIds: orderedIds),
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _optimisticOrder = null;
+        });
+      }
+      rethrow;
+    }
   }
 
   // Spec 18-19 & Issue 4: Blank Area Click -> 1 tap creates transient empty node and edits
@@ -602,15 +616,46 @@ class _NodePageState extends ConsumerState<NodePage>
         ),
         body: nodesAsync.when(
           data: (items) {
+            var displayItems = items;
+            final optimistic = _optimisticOrder;
+            if (optimistic != null) {
+              final currentIds = items.map((it) => it.id).toList();
+              if (listEquals(currentIds, optimistic)) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted && _optimisticOrder != null) {
+                    setState(() {
+                      _optimisticOrder = null;
+                    });
+                  }
+                });
+              } else {
+                final itemMap = {for (final it in items) it.id: it};
+                final sorted = <VisibleNodeItem>[];
+                for (final id in optimistic) {
+                  final it = itemMap.remove(id);
+                  if (it != null) sorted.add(it);
+                }
+                sorted.addAll(itemMap.values);
+                displayItems = [
+                  for (var i = 0; i < sorted.length; i++)
+                    sorted[i].copyWith(
+                      hasPreviousSibling: i > 0,
+                      previousSiblingId: i > 0 ? sorted[i - 1].id : null,
+                      isLastInParent: i == sorted.length - 1,
+                    ),
+                ];
+              }
+            }
+
             final activeItem = pageState.editingNodeId != null
-                ? items.findItem(pageState.editingNodeId!)
+                ? displayItems.findItem(pageState.editingNodeId!)
                 : null;
 
             return Column(
               children: [
                 Expanded(
                   child: NodeList(
-                    items: items,
+                    items: displayItems,
                     parentId: widget.parentId,
                     selectedNodeId: pageState.selectedNodeId,
                     editingNodeId: pageState.editingNodeId,
@@ -628,7 +673,7 @@ class _NodePageState extends ConsumerState<NodePage>
                     onEnter: (node, cursor, text) =>
                         _handleEnter(node, cursor, text),
                     onBackspaceEmpty: (node) =>
-                        _handleBackspaceEmpty(node, items),
+                        _handleBackspaceEmpty(node, displayItems),
                     onNavigate: _openNode,
                     onIndent: _handleIndent,
                     onOutdent: _handleOutdent,

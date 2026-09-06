@@ -37,7 +37,30 @@ class MemoryNodeRepository implements TreeMutationRepository {
   }
 
   @override
+  Stream<Map<NodeId, int>> watchAllChildCounts({
+    bool includeArchived = false,
+  }) async* {
+    Map<NodeId, int> read() {
+      final counts = <NodeId, int>{};
+      for (final node in _nodes.values) {
+        if (node.parentId != null && (includeArchived || !node.isArchived)) {
+          counts[node.parentId!] = (counts[node.parentId!] ?? 0) + 1;
+        }
+      }
+      return counts;
+    }
+
+    yield read();
+    yield* _changes.stream.map((_) => read());
+  }
+
+  Duration? transactionDelay;
+
+  @override
   Future<T> transaction<T>(TreeTransactionAction<T> action) async {
+    if (transactionDelay != null) {
+      await Future<void>.delayed(transactionDelay!);
+    }
     final staged = Map<NodeId, Node>.from(_nodes);
     final result = await action(_MemoryTransaction(staged));
     _nodes = staged;

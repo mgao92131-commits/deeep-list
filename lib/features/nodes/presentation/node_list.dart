@@ -84,19 +84,11 @@ class NodeList extends StatelessWidget {
               onReorderEnd();
             },
             proxyDecorator: (child, index, animation) {
-              return AnimatedBuilder(
-                animation: animation,
-                builder: (context, _) {
-                  return Transform.scale(
-                    scale: 1.02,
-                    child: Material(
-                      elevation: 3,
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(11),
-                      child: child,
-                    ),
-                  );
-                },
+              return Material(
+                elevation: 1,
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(11),
+                child: child,
               );
             },
             onReorderItem: _handleReorder,

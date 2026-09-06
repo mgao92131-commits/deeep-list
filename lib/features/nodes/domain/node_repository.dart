@@ -18,6 +18,10 @@ abstract interface class NodeRepository {
     NodeId? parentId, {
     bool includeArchived = false,
   });
+
+  Stream<Map<NodeId, int>> watchAllChildCounts({
+    bool includeArchived = false,
+  });
 }
 
 /// Mutation-only persistence port used by [TreeCommandService].

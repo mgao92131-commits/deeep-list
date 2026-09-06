@@ -39,3 +39,8 @@ Stream<Node?> node(Ref ref, NodeId nodeId) {
 Stream<List<Node>> children(Ref ref, NodeId? parentId) {
   return ref.watch(nodeRepositoryProvider).watchChildren(parentId);
 }
+
+@riverpod
+Stream<Map<NodeId, int>> childCounts(Ref ref) {
+  return ref.watch(nodeRepositoryProvider).watchAllChildCounts();
+}

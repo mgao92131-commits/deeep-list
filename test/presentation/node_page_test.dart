@@ -406,4 +406,179 @@ void main() {
     expect(find.text('ToDelete'), findsNothing);
     expect(await repository.getChildren(null), isEmpty);
   });
+
+  testWidgets(
+    'optimistic reorder retains target order immediately upon drop even when DB write is delayed',
+    (tester) async {
+      await commands.createNode(parentId: null, content: 'Item A');
+      await commands.createNode(parentId: null, content: 'Item B');
+      await commands.createNode(parentId: null, content: 'Item C');
+      await pumpApp(tester);
+
+      // Verify initial order: Item A, Item B, Item C
+      var textWidgets = tester
+          .widgetList<Text>(
+            find.descendant(
+              of: find.byType(NodeRow),
+              matching: find.byType(Text),
+            ),
+          )
+          .where(
+            (t) =>
+                t.data == 'Item A' || t.data == 'Item B' || t.data == 'Item C',
+          )
+          .toList();
+      expect(textWidgets.map((t) => t.data).toList(), [
+        'Item A',
+        'Item B',
+        'Item C',
+      ]);
+
+      // Inject 200ms transaction delay into repository to simulate slow DB persistence
+      repository.transactionDelay = const Duration(milliseconds: 200);
+
+      // Trigger reorder of Item A (index 0) to after Item B (index 1), then finish dragging
+      final reorderable = tester.widget<SliverReorderableList>(
+        find.byType(SliverReorderableList),
+      );
+      reorderable.onReorderItem?.call(0, 1);
+      reorderable.onReorderEnd?.call(1);
+
+      // Rebuild one frame while DB write is still pending in 200ms delay
+      await tester.pump();
+
+      // At this point, the DB transaction has NOT finished yet,
+      // but UI must show optimistic order (Item B, Item A, Item C), NOT flashing back!
+      textWidgets = tester
+          .widgetList<Text>(
+            find.descendant(
+              of: find.byType(NodeRow),
+              matching: find.byType(Text),
+            ),
+          )
+          .where(
+            (t) =>
+                t.data == 'Item A' || t.data == 'Item B' || t.data == 'Item C',
+          )
+          .toList();
+      expect(textWidgets.map((t) => t.data).toList(), [
+        'Item B',
+        'Item A',
+        'Item C',
+      ]);
+
+      // Now advance time past the 200ms DB delay and let persistence finish
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pumpAndSettle();
+
+      // Order is confirmed by DB and optimistic state is smoothly released.
+      // The final order must strictly remain Item B, Item A, Item C!
+      textWidgets = tester
+          .widgetList<Text>(
+            find.descendant(
+              of: find.byType(NodeRow),
+              matching: find.byType(Text),
+            ),
+          )
+          .where(
+            (t) =>
+                t.data == 'Item A' || t.data == 'Item B' || t.data == 'Item C',
+          )
+          .toList();
+      expect(textWidgets.map((t) => t.data).toList(), [
+        'Item B',
+        'Item A',
+        'Item C',
+      ]);
+    },
+  );
+
+  testWidgets(
+    'NodeRow trailing slot displays childCount when > 0, blanks when 0, and switches to chevron in selected state',
+    (tester) async {
+      final parentA = await commands.createNode(
+        parentId: null,
+        content: 'Parent A',
+      );
+      await commands.createNode(parentId: null, content: 'Parent B');
+      // Create 3 children under Parent A (2 active, 1 archived)
+      await commands.createNode(parentId: parentA.id, content: 'Child A1');
+      await commands.createNode(parentId: parentA.id, content: 'Child A2');
+      final archivedChild = await commands.createNode(
+        parentId: parentA.id,
+        content: 'Child A3',
+      );
+      await commands.archiveNode(archivedChild.id);
+
+      await pumpApp(tester);
+
+      // Normal state:
+      // Parent A has 2 unarchived children -> shows "2"
+      expect(find.text('2'), findsOneWidget);
+
+      // Parent B has 0 children -> no count text (find.text('0') does not exist)
+      expect(find.text('0'), findsNothing);
+
+      // Tap on count '2' area of Parent A -> taps whole node into Selected mode (warnIfMissed: false because IgnorePointer intentionally passes through)
+      await tester.tap(find.text('2'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      // Now Parent A is in Selected state:
+      // The count '2' is replaced by Chevron (›)
+      expect(find.text('2'), findsNothing);
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+
+      // Tap the Chevron -> navigates to /node/Parent A
+      await tester.tap(find.byIcon(Icons.chevron_right));
+      await tester.pumpAndSettle();
+
+      // DeepList page header displays Parent A's title
+      expect(find.text('Parent A'), findsWidgets);
+      // In Parent A's page, unarchived children are visible
+      expect(find.text('Child A1'), findsOneWidget);
+      expect(find.text('Child A2'), findsOneWidget);
+      expect(find.text('Child A3'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'NodeRow text right padding is permanently 48dp across Normal, Selected, and Editing states',
+    (tester) async {
+      await commands.createNode(parentId: null, content: 'Stable Width Node');
+      await pumpApp(tester);
+
+      EdgeInsets getTextPadding() {
+        final paddingWidget = tester.widget<Padding>(
+          find
+              .ancestor(
+                of: find.text('Stable Width Node'),
+                matching: find.byType(Padding),
+              )
+              .first,
+        );
+        return paddingWidget.padding as EdgeInsets;
+      }
+
+      // Normal state: right padding is 48.0
+      expect(getTextPadding().right, 48.0);
+
+      // Tap to enter Selected state
+      await tester.tap(find.text('Stable Width Node'));
+      await tester.pumpAndSettle();
+      expect(getTextPadding().right, 48.0);
+
+      // Tap again to enter Editing state
+      await tester.tap(find.text('Stable Width Node'));
+      await tester.pumpAndSettle();
+      final editingPaddingWidget = tester.widget<Padding>(
+        find
+            .ancestor(
+              of: find.byType(TextField),
+              matching: find.byType(Padding),
+            )
+            .first,
+      );
+      expect((editingPaddingWidget.padding as EdgeInsets).right, 48.0);
+    },
+  );
 }

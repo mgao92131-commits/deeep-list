@@ -46,6 +46,34 @@ class DriftNodeRepository implements TreeMutationRepository {
   }
 
   @override
+  Stream<Map<NodeId, int>> watchAllChildCounts({
+    bool includeArchived = false,
+  }) {
+    final countCol = database.nodes.id.count();
+    final query = database.selectOnly(database.nodes)
+      ..addColumns([database.nodes.parentId, countCol])
+      ..where(
+        database.nodes.parentId.isNotNull() &
+            (includeArchived
+                ? const Constant(true)
+                : database.nodes.isArchived.equals(false)),
+      )
+      ..groupBy([database.nodes.parentId]);
+
+    return query.watch().map((rows) {
+      final result = <NodeId, int>{};
+      for (final row in rows) {
+        final pid = row.read(database.nodes.parentId);
+        final count = row.read(countCol) ?? 0;
+        if (pid != null) {
+          result[pid] = count;
+        }
+      }
+      return result;
+    });
+  }
+
+  @override
   Future<T> transaction<T>(TreeTransactionAction<T> action) {
     return database.transaction(
       () => action(_DriftNodeRepositoryTransaction(database)),

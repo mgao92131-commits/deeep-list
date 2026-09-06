@@ -7,6 +7,9 @@ import '../models/visible_node_item.dart';
 final visibleNodesProvider = Provider.autoDispose
     .family<AsyncValue<List<VisibleNodeItem>>, NodeId?>((ref, parentId) {
       final childrenAsync = ref.watch(childrenProvider(parentId));
+      final countsAsync = ref.watch(childCountsProvider);
+      final counts = countsAsync.value ?? const {};
+
       return childrenAsync.when(
         data: (nodes) {
           final items = <VisibleNodeItem>[];
@@ -19,6 +22,7 @@ final visibleNodesProvider = Provider.autoDispose
                 hasPreviousSibling: i > 0,
                 previousSiblingId: i > 0 ? nodes[i - 1].id : null,
                 isLastInParent: i == nodes.length - 1,
+                childCount: counts[node.id] ?? 0,
               ),
             );
           }

@@ -306,12 +306,9 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
       );
     }
 
-    // Spec 8: Chevron only in Selected state.
-    // Spec 5: In Normal state text enjoys full width (14dp from screen edge -> 6dp inside 8dp margin).
-    // In Selected state, text has right padding (40dp) to avoid overlapping Chevron.
-    final rightPadding = widget.isSelected && !widget.isEditing
-        ? 40.0
-        : (14.0 - horizontalMargin);
+    // Trailing slot is always 48dp wide. Right padding is permanently fixed to 48.0
+    // so text width never jumps or wraps differently across Normal, Selected, Editing, and Dragging.
+    const rightPadding = 48.0;
 
     const dividerIndent = 20.0;
 
@@ -357,9 +354,9 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
                 child: Stack(
                   alignment: Alignment.centerLeft,
                   children: [
-                    // Main text content (left edge padding never jumps)
+                    // Main text content (left and right edge paddings are permanent)
                     Padding(
-                      padding: EdgeInsets.only(
+                      padding: const EdgeInsets.only(
                         left: innerLeftPadding,
                         right: rightPadding,
                         top: 12,
@@ -367,26 +364,14 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
                       ),
                       child: content,
                     ),
-                    // Chevron overlay (Spec 8: touch area 48dp, icon right aligned 6dp inside margin 8dp = 14dp from screen edge)
-                    if (widget.isSelected && !widget.isEditing)
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        bottom: 0,
-                        child: Tooltip(
-                          message: 'Open',
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => unawaited(widget.onNavigate()),
-                            child: Container(
-                              width: 48,
-                              alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.only(right: 6),
-                              child: const Icon(Icons.chevron_right, size: 20),
-                            ),
-                          ),
-                        ),
-                      ),
+                    // Permanent 48dp Trailing Slot
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: 48,
+                      child: _buildTrailingSlot(theme),
+                    ),
                   ],
                 ),
               ),
@@ -404,5 +389,42 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
         ),
       ),
     );
+  }
+
+  Widget _buildTrailingSlot(ThemeData theme) {
+    if (widget.isEditing) {
+      return const SizedBox(width: 48);
+    }
+    if (widget.isSelected) {
+      return Tooltip(
+        message: 'Open',
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => unawaited(widget.onNavigate()),
+          child: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 6),
+            child: const Icon(Icons.chevron_right, size: 20),
+          ),
+        ),
+      );
+    }
+    // Normal or Dragging
+    if (widget.item.childCount > 0) {
+      return IgnorePointer(
+        child: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 8),
+          child: Text(
+            '${widget.item.childCount}',
+            style: TextStyle(
+              fontSize: 13,
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+            ),
+          ),
+        ),
+      );
+    }
+    return const SizedBox(width: 48);
   }
 }
