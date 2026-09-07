@@ -19,6 +19,7 @@ import 'providers/visible_nodes_provider.dart';
 import 'widgets/keyboard_toolbar.dart';
 import 'widgets/node_action_menu.dart';
 import 'widgets/smart_entries_bar.dart';
+import 'widgets/archive_status_bar.dart';
 
 class NodePage extends ConsumerStatefulWidget {
   final NodeId? parentId;
@@ -694,6 +695,13 @@ class _NodePageState extends ConsumerState<NodePage>
 
             return Column(
               children: [
+                if (archiveView == ArchiveView.archived)
+                  ArchiveStatusBar(
+                    count: archivedCount,
+                    onShowActive: () => ref
+                        .read(archiveViewProvider(widget.parentId).notifier)
+                        .setView(ArchiveView.active),
+                  ),
                 if (showSmartEntries)
                   SmartEntriesBar(
                     onTodayTap: () => context.push('/today'),

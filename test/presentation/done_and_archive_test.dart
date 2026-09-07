@@ -80,6 +80,8 @@ void main() {
 
         final field = tester.widget<TextField>(find.byType(TextField));
         expect(field.focusNode!.hasFocus, isTrue);
+        expect(find.byType(SnackBar), findsNothing);
+        expect(find.byType(AlertDialog), findsNothing);
 
         // Icon changes to check_circle and tooltip to 取消完成
         expect(find.byTooltip('取消完成'), findsOneWidget);
@@ -198,6 +200,8 @@ void main() {
 
         // Title updated to indicate archived filter
         expect(find.text('DeepList · 已归档'), findsOneWidget);
+        expect(find.text('已归档 · 1'), findsOneWidget);
+        expect(find.text('仅显示已归档节点'), findsOneWidget);
 
         // List now displays archived item only
         expect(find.text('Archived Item'), findsOneWidget);
@@ -215,6 +219,16 @@ void main() {
         expect(find.text('DeepList'), findsOneWidget);
         expect(find.text('Active Item'), findsOneWidget);
         expect(find.text('Archived Item'), findsNothing);
+        expect(find.byKey(const ValueKey('archive-status-bar')), findsNothing);
+
+        await tester.tap(find.byIcon(Icons.more_vert));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('查看已归档'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('未归档'));
+        await tester.pumpAndSettle();
+        expect(find.text('Active Item'), findsOneWidget);
+        expect(find.byKey(const ValueKey('archive-status-bar')), findsNothing);
       },
     );
 
@@ -242,6 +256,7 @@ void main() {
 
         expect(find.text('Archived 1'), findsOneWidget);
         expect(find.text('Archived 2'), findsOneWidget);
+        expect(find.text('已归档 · 2'), findsOneWidget);
 
         // Long press Archived 1: menu shows 恢复 instead of 归档
         await tester.longPress(find.text('Archived 1'));
@@ -258,6 +273,7 @@ void main() {
         expect(find.text('Archived 2'), findsOneWidget);
 
         final restored = await repository.getNode(archived1.id);
+        expect(find.text('已归档 · 1'), findsOneWidget);
         expect(restored!.isArchived, isFalse);
       },
     );
