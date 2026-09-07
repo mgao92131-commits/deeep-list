@@ -1,14 +1,12 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:deep_list/app/app.dart';
 import 'package:deep_list/app/providers.dart';
+import 'package:deep_list/features/nodes/application/clipboard_controller.dart';
 import 'package:deep_list/features/nodes/application/node_page_controller.dart';
 import 'package:deep_list/features/nodes/application/tree_command_service.dart';
-import 'package:deep_list/features/nodes/presentation/widgets/node_row.dart';
 
 import '../helpers/memory_node_repository.dart';
 
@@ -41,807 +39,380 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('tap another node transfers selection in one tap (Spec 9)', (
+  // A. 点击直接编辑
+  testWidgets(
+    'A. tap node once enters editing directly without selected state',
+    (tester) async {
+      final a = await commands.createNode(parentId: null, content: 'A');
+      await pumpApp(tester);
+
+      await tester.tap(find.text('A'));
+      await tester.pumpAndSettle();
+
+      final controller = ProviderScope.containerOf(
+        tester.element(find.byType(DeepListApp)),
+      ).read(nodePageControllerProvider(null));
+
+      expect(controller.mode, PageMode.editing);
+      expect(controller.editingNodeId, a.id);
+      expect(find.byType(TextField), findsOneWidget);
+    },
+  );
+
+  // B. 编辑节点切换
+  testWidgets(
+    'B. editing node switch saves previous and edits target seamlessly',
+    (tester) async {
+      final a = await commands.createNode(parentId: null, content: 'A');
+      final b = await commands.createNode(parentId: null, content: 'B');
+      await pumpApp(tester);
+
+      // Edit A
+      await tester.tap(find.text('A'));
+      await tester.pumpAndSettle();
+
+      // Modify A
+      await tester.enterText(find.byType(TextField), 'A Modified');
+      await tester.pump();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DeepListApp)),
+      );
+      expect(
+        container.read(nodePageControllerProvider(null)).mode,
+        PageMode.editing,
+      );
+
+      // Tap B directly
+      await tester.tap(find.text('B'));
+      await tester.pumpAndSettle();
+
+      // B is now editing
+      final pageState = container.read(nodePageControllerProvider(null));
+      expect(pageState.mode, PageMode.editing);
+      expect(pageState.editingNodeId, b.id);
+
+      // A is saved in repository
+      final nodeA = await repository.getNode(a.id);
+      expect(nodeA!.content, 'A Modified');
+    },
+  );
+
+  // C. 空节点切换
+  testWidgets('C. empty editing node is deleted upon tapping another node', (
     tester,
   ) async {
-    await commands.createNode(parentId: null, content: '工作');
-    await commands.createNode(parentId: null, content: '生活');
+    await commands.createNode(parentId: null, content: 'Target');
     await pumpApp(tester);
 
-    // 1st tap on 工作: selects 工作
-    await tester.tap(find.text('工作'));
+    // Create empty node via blank area
+    await tester.tap(find.byKey(const ValueKey('blank-area')));
     await tester.pumpAndSettle();
+    expect(await repository.getChildren(null), hasLength(2));
+
+    // Tap Target
+    await tester.tap(find.text('Target'));
+    await tester.pumpAndSettle();
+
+    final remaining = await repository.getChildren(null);
+    expect(remaining, hasLength(1));
+    expect(remaining.first.content, 'Target');
 
     final controller = ProviderScope.containerOf(
       tester.element(find.byType(DeepListApp)),
     ).read(nodePageControllerProvider(null));
-    expect(controller.mode, PageMode.selected);
-    expect(find.text('工作'), findsOneWidget);
-
-    // Single tap on 生活: transfers selection directly (Spec 9)
-    await tester.tap(find.text('生活'));
-    await tester.pumpAndSettle();
-
-    final updatedController = ProviderScope.containerOf(
-      tester.element(find.byType(DeepListApp)),
-    ).read(nodePageControllerProvider(null));
-    expect(updatedController.mode, PageMode.selected);
-    expect(
-      (await repository.getChildren(
-        null,
-      )).firstWhere((n) => n.content == '生活').id,
-      updatedController.selectedNodeId,
-    );
+    expect(controller.mode, PageMode.editing);
+    expect(controller.editingNodeId, remaining.first.id);
   });
 
+  // D. 点击空白无缝创建
   testWidgets(
-    'tapping another node while editing empty node deletes it and selects target in one tap (Spec 15)',
+    'D. tapping blank area during editing saves current and creates new node seamlessly',
     (tester) async {
-      final target = await commands.createNode(parentId: null, content: '目标节点');
+      await commands.createNode(parentId: null, content: 'Original');
       await pumpApp(tester);
 
-      // Tap trailing blank area to create empty node
+      // Edit A
+      await tester.tap(find.text('Original'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'Saved Content');
+      await tester.pump();
+
+      // Tap blank area
       await tester.tap(find.byKey(const ValueKey('blank-area')));
       await tester.pumpAndSettle();
-      expect(await repository.getChildren(null), hasLength(2));
 
-      // Tap 目标节点
-      await tester.tap(find.text('目标节点'));
-      await tester.pumpAndSettle();
-
-      // Empty node should be removed silently, 目标节点 is selected
-      final remaining = await repository.getChildren(null);
-      expect(remaining, hasLength(1));
-      expect(remaining.single.id, target.id);
+      // Previous node is saved, new empty node is created and editing
+      final children = await repository.getChildren(null);
+      expect(children, hasLength(2));
+      expect(children[0].content, 'Saved Content');
+      expect(children[1].content, '');
 
       final controller = ProviderScope.containerOf(
         tester.element(find.byType(DeepListApp)),
       ).read(nodePageControllerProvider(null));
-      expect(controller.mode, PageMode.selected);
-      expect(controller.selectedNodeId, target.id);
+      expect(controller.mode, PageMode.editing);
+      expect(controller.editingNodeId, children[1].id);
     },
   );
 
+  // E. 长按菜单
   testWidgets(
-    'Keyboard toolbar appears during editing with Indent, Outdent and Done buttons (Spec 29)',
-    (tester) async {
-      final first = await commands.createNode(parentId: null, content: '工作');
-      final second = await commands.createNode(parentId: null, content: '工作项');
-      await pumpApp(tester);
-
-      // Double tap 工作项 to enter editing
-      await tester.tap(find.text('工作项'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('工作项'));
-      await tester.pumpAndSettle();
-
-      // Keyboard toolbar should be visible
-      expect(find.byTooltip('Indent'), findsOneWidget);
-      expect(find.byTooltip('Outdent'), findsOneWidget);
-      expect(find.text('完成'), findsOneWidget);
-
-      // 工作项 has a previous sibling, so Indent is enabled
-      await tester.tap(find.byTooltip('Indent'));
-      await tester.pumpAndSettle();
-
-      // 工作项 should now be a child of 工作, moving into 工作's subpage
-      final secondNode = await repository.getNode(second.id);
-      expect(secondNode!.parentId, first.id);
-
-      // In single-level drilldown, once indented into child page, it moves out of root page
-      final controller = ProviderScope.containerOf(
-        tester.element(find.byType(DeepListApp)),
-      ).read(nodePageControllerProvider(null));
-      expect(controller.isNormal, isTrue);
-      expect(find.byType(TextField), findsNothing);
-    },
-  );
-
-  testWidgets(
-    'Back behavior transitions through Editing -> Selected -> Normal (Spec 35)',
+    'E. long press node opens NodeActionMenu while mode stays normal',
     (tester) async {
       await commands.createNode(parentId: null, content: 'Item');
       await pumpApp(tester);
 
-      // Double tap to edit
-      await tester.tap(find.text('Item'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Item'));
+      await tester.longPress(find.text('Item'));
       await tester.pumpAndSettle();
 
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(DeepListApp)),
-      );
-      expect(
-        container.read(nodePageControllerProvider(null)).mode,
-        PageMode.editing,
-      );
+      // Menu options exist
+      expect(find.text('复制'), findsOneWidget);
+      expect(find.text('粘贴'), findsOneWidget);
+      expect(find.text('归档'), findsOneWidget);
+      expect(find.text('删除'), findsOneWidget);
 
-      // Trigger back via ModalRoute / PopScope
-      final dynamic popScope = tester.widget(find.byType(PopScope<void>));
-      popScope.onPopInvokedWithResult(false, null);
-      await tester.pumpAndSettle();
-
-      // Should now be in Selected state
-      expect(
-        container.read(nodePageControllerProvider(null)).mode,
-        PageMode.selected,
-      );
-
-      // Trigger back again
-      popScope.onPopInvokedWithResult(false, null);
-      await tester.pumpAndSettle();
-
-      // Should now be in Normal state
-      expect(
-        container.read(nodePageControllerProvider(null)).mode,
-        PageMode.normal,
-      );
-    },
-  );
-
-  testWidgets(
-    'Horizontal swipe right triggers indent and resets to normal (Spec 20-27)',
-    (tester) async {
-      final first = await commands.createNode(
-        parentId: null,
-        content: 'ParentNode',
-      );
-      final second = await commands.createNode(
-        parentId: null,
-        content: 'ChildNode',
-      );
-      await pumpApp(tester);
-
-      // Swipe right on ChildNode by 80dp (exceeds 55dp armed threshold)
-      await tester.drag(find.text('ChildNode'), const Offset(80, 0));
-      await tester.pumpAndSettle();
-
-      // ChildNode should now be child of ParentNode
-      final updatedSecond = await repository.getNode(second.id);
-      expect(updatedSecond!.parentId, first.id);
-
-      // Page should be in Normal state after swipe commit
       final controller = ProviderScope.containerOf(
         tester.element(find.byType(DeepListApp)),
       ).read(nodePageControllerProvider(null));
-      expect(controller.isNormal, isTrue);
+      expect(controller.mode, PageMode.normal);
     },
   );
 
-  testWidgets(
-    'Selected + tap blank creates transient node and enters Editing in one tap (Issue 4)',
-    (tester) async {
-      await commands.createNode(parentId: null, content: 'Existing');
-      await pumpApp(tester);
-
-      // Tap on Existing to select it
-      await tester.tap(find.text('Existing'));
-      await tester.pumpAndSettle();
-
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(DeepListApp)),
-      );
-      expect(
-        container.read(nodePageControllerProvider(null)).mode,
-        PageMode.selected,
-      );
-
-      // Single tap on trailing blank area
-      await tester.tap(find.byKey(const ValueKey('blank-area')));
-      await tester.pumpAndSettle();
-
-      // Should immediately create new node and enter Editing in 1 tap!
-      expect(
-        container.read(nodePageControllerProvider(null)).mode,
-        PageMode.editing,
-      );
-      expect(find.byType(TextField), findsOneWidget);
-    },
-  );
-
-  testWidgets(
-    'Horizontal swipe left triggers outdent for child node and is no-op at root',
-    (tester) async {
-      final l1 = await commands.createNode(parentId: null, content: 'L1');
-      final l2 = await commands.createNode(parentId: l1.id, content: 'L2');
-      await pumpApp(tester);
-
-      // On Root page: Swipe left on L1 by -80dp -> no-op because root nodes cannot outdent
-      await tester.drag(find.text('L1'), const Offset(-80, 0));
-      await tester.pumpAndSettle();
-
-      final updatedL1 = await repository.getNode(l1.id);
-      expect(updatedL1!.parentId, isNull);
-
-      // Navigate into L1 (has 1 child -> tap count '1')
-      await tester.tap(find.text('1'));
-      await tester.pumpAndSettle();
-
-      // Inside L1: L2 is displayed. Swipe left on L2 by -80dp to outdent
-      await tester.drag(find.text('L2'), const Offset(-80, 0));
-      await tester.pumpAndSettle();
-
-      // L2 should now be elevated to top level (parentId == null) and removed from L1
-      final updatedL2 = await repository.getNode(l2.id);
-      expect(updatedL2!.parentId, isNull);
-      expect(find.text('L2'), findsNothing);
-    },
-  );
-
-  testWidgets('Focus blur on empty node deletes it completely (Issue 3)', (
+  // F. 编辑时长按
+  testWidgets('F. long press during editing does not open NodeActionMenu', (
     tester,
   ) async {
+    await commands.createNode(parentId: null, content: 'EditingNode');
     await pumpApp(tester);
 
-    // Tap blank area to create empty node
-    await tester.tap(find.text('点击空白处开始记录'));
-    await tester.pumpAndSettle();
-    expect(find.byType(TextField), findsOneWidget);
-    expect(await repository.getChildren(null), hasLength(1));
-
-    // Trigger blur by unfocusing
-    final field = tester.widget<TextField>(find.byType(TextField));
-    field.focusNode!.unfocus();
+    // Enter editing
+    await tester.tap(find.text('EditingNode'));
     await tester.pumpAndSettle();
 
-    // Empty node must be deleted!
+    // Long press text field
+    await tester.longPress(find.byType(TextField));
+    await tester.pumpAndSettle();
+
+    // NodeActionMenu should not be open
+    expect(find.text('归档'), findsNothing);
+    expect(find.text('删除'), findsNothing);
+  });
+
+  // G. 拖动柄排序同级
+  testWidgets(
+    'G. reorder via drag handle reorders siblings and preserves parentId',
+    (tester) async {
+      await commands.createNode(parentId: null, content: 'Item 1');
+      await commands.createNode(parentId: null, content: 'Item 2');
+      await commands.createNode(parentId: null, content: 'Item 3');
+      await pumpApp(tester);
+
+      // Find drag handles
+      final handles = find.byIcon(Icons.drag_indicator);
+      expect(handles, findsNWidgets(3));
+
+      // Drag handle 0 down by 120dp
+      await tester.drag(handles.at(0), const Offset(0, 120));
+      await tester.pumpAndSettle();
+
+      final siblings = await repository.getChildren(null);
+      expect(siblings.map((n) => n.content).toList(), [
+        'Item 2',
+        'Item 1',
+        'Item 3',
+      ]);
+      for (final s in siblings) {
+        expect(s.parentId, isNull);
+      }
+    },
+  );
+
+  // H. 长按正文不再启动拖动
+  testWidgets(
+    'H. long press body opens NodeActionMenu without triggering reorder',
+    (tester) async {
+      await commands.createNode(parentId: null, content: 'Alpha');
+      await commands.createNode(parentId: null, content: 'Beta');
+      await pumpApp(tester);
+
+      await tester.longPress(find.text('Alpha'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('删除'), findsOneWidget);
+
+      // Order has not changed
+      final siblings = await repository.getChildren(null);
+      expect(siblings.map((n) => n.content).toList(), ['Alpha', 'Beta']);
+    },
+  );
+
+  // I. 粘贴位置
+  testWidgets('I. paste creates sibling directly below target node', (
+    tester,
+  ) async {
+    await commands.createNode(parentId: null, content: 'A');
+    final b = await commands.createNode(parentId: null, content: 'B');
+    await commands.createNode(parentId: null, content: 'C');
+    final x = await commands.createNode(parentId: null, content: 'X');
+    await pumpApp(tester);
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(DeepListApp)),
+    );
+    // Copy X
+    container.read(clipboardControllerProvider.notifier).copy(x.id);
+
+    // Long press B -> Paste
+    await tester.longPress(find.text('B'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('粘贴'), findsOneWidget);
+    await tester.tap(find.text('粘贴'));
+    await tester.pumpAndSettle();
+
+    final siblings = await repository.getChildren(null);
+    expect(siblings.map((n) => n.content).toList(), ['A', 'B', 'X', 'C', 'X']);
+    expect(siblings[2].content, 'X');
+    expect(siblings[2].parentId, b.parentId);
+  });
+
+  // J. subtree copy
+  testWidgets(
+    'J. copySubtree copies entire descendant hierarchy with new IDs',
+    (tester) async {
+      final a = await commands.createNode(parentId: null, content: 'A');
+      final a1 = await commands.createNode(parentId: a.id, content: 'A1');
+      final a11 = await commands.createNode(parentId: a1.id, content: 'A11');
+
+      final copiedRoot = await commands.copySubtree(
+        sourceNodeId: a.id,
+        targetParentId: null,
+        targetPosition: 1,
+      );
+
+      expect(copiedRoot.id, isNot(a.id));
+      expect(copiedRoot.content, 'A');
+      expect(copiedRoot.parentId, isNull);
+
+      final copiedAChildren = await repository.getChildren(copiedRoot.id);
+      expect(copiedAChildren, hasLength(1));
+      final copiedA1 = copiedAChildren.first;
+      expect(copiedA1.id, isNot(a1.id));
+      expect(copiedA1.content, 'A1');
+      expect(copiedA1.parentId, copiedRoot.id);
+
+      final copiedA1Children = await repository.getChildren(copiedA1.id);
+      expect(copiedA1Children, hasLength(1));
+      final copiedA11 = copiedA1Children.first;
+      expect(copiedA11.id, isNot(a11.id));
+      expect(copiedA11.content, 'A11');
+      expect(copiedA11.parentId, copiedA1.id);
+    },
+  );
+
+  // K. 归档
+  testWidgets('K. long press archive hides node while parent remains', (
+    tester,
+  ) async {
+    final b = await commands.createNode(parentId: null, content: 'ToArchive');
+    await pumpApp(tester);
+
+    await tester.longPress(find.text('ToArchive'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('归档'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ToArchive'), findsNothing);
+    final nodeB = await repository.getNode(b.id);
+    expect(nodeB!.isArchived, isTrue);
+    expect(nodeB.parentId, isNull);
+  });
+
+  // L. 删除
+  testWidgets('L. long press delete removes subtree completely', (
+    tester,
+  ) async {
+    final b = await commands.createNode(parentId: null, content: 'ToDelete');
+    await commands.createNode(parentId: b.id, content: 'ChildOfB');
+    await pumpApp(tester);
+
+    await tester.longPress(find.text('ToDelete'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('删除'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ToDelete'), findsNothing);
+    expect(await repository.getNode(b.id), isNull);
     expect(await repository.getChildren(null), isEmpty);
-    expect(find.byType(TextField), findsNothing);
   });
 
-  testWidgets('Non-empty node Backspace at cursor 0 does not merge (Issue 6)', (
+  // M. 返回键状态机简化: Editing -> Normal -> Pop
+  testWidgets('M. back behavior transitions from Editing directly to Normal', (
     tester,
   ) async {
-    final first = await commands.createNode(parentId: null, content: 'ABC');
-    final second = await commands.createNode(parentId: null, content: 'DEF');
+    await commands.createNode(parentId: null, content: 'Item');
     await pumpApp(tester);
 
-    // Double tap DEF to edit
-    await tester.tap(find.text('DEF'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('DEF'));
+    // Tap to edit
+    await tester.tap(find.text('Item'));
     await tester.pumpAndSettle();
 
-    final field = tester.widget<TextField>(find.byType(TextField));
-    field.controller!.selection = const TextSelection.collapsed(offset: 0);
-    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(DeepListApp)),
+    );
+    expect(
+      container.read(nodePageControllerProvider(null)).mode,
+      PageMode.editing,
+    );
+
+    // Trigger back via PopScope
+    final dynamic popScope = tester.widget(find.byType(PopScope<void>));
+    popScope.onPopInvokedWithResult(false, null);
     await tester.pumpAndSettle();
 
-    // Nodes must remain separate, NOT merged!
-    expect((await repository.getNode(first.id))!.content, 'ABC');
-    expect((await repository.getNode(second.id))!.content, 'DEF');
-    expect(await repository.getChildren(null), hasLength(2));
+    // Transitions directly to Normal state, no Selected state
+    expect(
+      container.read(nodePageControllerProvider(null)).mode,
+      PageMode.normal,
+    );
   });
 
-  Future<void> longPressDrag(
-    WidgetTester tester,
-    Finder startFinder,
-    Finder endFinder,
+  // N. KeyboardToolbar ••• 打开操作菜单
+  testWidgets('N. keyboard toolbar more button opens NodeActionMenu', (
+    tester,
   ) async {
-    final start = tester.getCenter(startFinder);
-    final end = tester.getCenter(endFinder);
-    final gesture = await tester.startGesture(start);
-    await tester.pump(kLongPressTimeout + kPressTimeout);
-    await gesture.moveTo(end);
-    await tester.pump(kPressTimeout);
-    await gesture.up();
-    await tester.pumpAndSettle();
-  }
-
-  testWidgets('Level 1 downward drag reorder: A B C -> B A C', (tester) async {
-    await commands.createNode(parentId: null, content: 'A');
-    await commands.createNode(parentId: null, content: 'B');
-    await commands.createNode(parentId: null, content: 'C');
+    await commands.createNode(parentId: null, content: 'Active');
     await pumpApp(tester);
 
-    // Long press A and drag downward to C to place after B
-    await longPressDrag(tester, find.text('A'), find.text('C'));
-
-    final children = await repository.getChildren(null);
-    expect(children.map((n) => n.content).toList(), ['B', 'A', 'C']);
-  });
-
-  testWidgets('Level 1 upward drag reorder: A B C -> A C B', (tester) async {
-    await commands.createNode(parentId: null, content: 'A');
-    await commands.createNode(parentId: null, content: 'B');
-    await commands.createNode(parentId: null, content: 'C');
-    await pumpApp(tester);
-
-    // Long press C and drag upward to B to place between A and B
-    await longPressDrag(tester, find.text('C'), find.text('B'));
-
-    final children = await repository.getChildren(null);
-    expect(children.map((n) => n.content).toList(), ['A', 'C', 'B']);
-  });
-
-  testWidgets(
-    'Nested-page downward drag reorder within parent: A1 A2 A3 -> A2 A1 A3',
-    (tester) async {
-      final parent = await commands.createNode(
-        parentId: null,
-        content: 'Parent',
-      );
-      await commands.createNode(parentId: parent.id, content: 'A1');
-      await commands.createNode(parentId: parent.id, content: 'A2');
-      await commands.createNode(parentId: parent.id, content: 'A3');
-      await pumpApp(tester);
-
-      // Navigate into Parent (has 3 children -> tap count '3')
-      await tester.tap(find.text('3'));
-      await tester.pumpAndSettle();
-
-      // Long press A1 and drag downward to A3 to place after A2
-      await longPressDrag(tester, find.text('A1'), find.text('A3'));
-
-      final children = await repository.getChildren(parent.id);
-      expect(children.map((n) => n.content).toList(), ['A2', 'A1', 'A3']);
-      // All children still have parent.id
-      for (final child in children) {
-        expect(child.parentId, parent.id);
-      }
-    },
-  );
-
-  testWidgets(
-    'Nested-page upward drag reorder within parent: A1 A2 A3 -> A1 A3 A2',
-    (tester) async {
-      final parent = await commands.createNode(
-        parentId: null,
-        content: 'Parent',
-      );
-      await commands.createNode(parentId: parent.id, content: 'A1');
-      await commands.createNode(parentId: parent.id, content: 'A2');
-      await commands.createNode(parentId: parent.id, content: 'A3');
-      await pumpApp(tester);
-
-      // Navigate into Parent (has 3 children -> tap count '3')
-      await tester.tap(find.text('3'));
-      await tester.pumpAndSettle();
-
-      // Long press A3 and drag upward to A2 to place between A1 and A2
-      await longPressDrag(tester, find.text('A3'), find.text('A2'));
-
-      final children = await repository.getChildren(parent.id);
-      expect(children.map((n) => n.content).toList(), ['A1', 'A3', 'A2']);
-      for (final child in children) {
-        expect(child.parentId, parent.id);
-      }
-    },
-  );
-
-  testWidgets(
-    'NodeRow width fills available list width for both short and long text (P0 Layout)',
-    (tester) async {
-      final shortNode = await commands.createNode(parentId: null, content: '短');
-      final longNode = await commands.createNode(
-        parentId: null,
-        content: '这是一个非常长的一级节点文本用于验证组件绝对不会退化为根据文本内容自适应宽度导致被居中或卡片化',
-      );
-      await commands.createNode(parentId: shortNode.id, content: '二级节点');
-      await pumpApp(tester);
-
-      final screenWidth = tester.getSize(find.byType(DeepListApp)).width;
-
-      // On root page: 2 direct root NodeRows
-      final nodeRowFinders = find.byType(NodeRow);
-      expect(nodeRowFinders, findsNWidgets(2));
-
-      // 1. Every NodeRow must span the entire screen width
-      for (var i = 0; i < 2; i++) {
-        final rowSize = tester.getSize(nodeRowFinders.at(i));
-        expect(rowSize.width, screenWidth);
-      }
-
-      // 2. The AnimatedContainer inside each NodeRow spans screenWidth, and its inner content (Stack)
-      // spans screenWidth - 16 (due to 8dp margin on each side)
-      final animatedContainers = find.descendant(
-        of: nodeRowFinders,
-        matching: find.byType(AnimatedContainer),
-      );
-      for (var i = 0; i < 2; i++) {
-        final containerSize = tester.getSize(animatedContainers.at(i));
-        expect(containerSize.width, screenWidth);
-        final stackFinder = find.descendant(
-          of: animatedContainers.at(i),
-          matching: find.byType(Stack),
-        );
-        expect(tester.getSize(stackFinder).width, screenWidth - 16.0);
-        expect(tester.getTopLeft(stackFinder).dx, 8.0);
-      }
-
-      // 3. Text start x coordinates: unified 20.0 for all nodes (Spec: 8dp margin + 12dp innerLeftPadding)
-      final shortTextPos = tester.getTopLeft(find.text('短'));
-      final longTextPos = tester.getTopLeft(find.text(longNode.content));
-      expect(shortTextPos.dx, 20.0);
-      expect(longTextPos.dx, 20.0);
-
-      // 4. In Selected state:
-      // Tap short node '短'
-      await tester.tap(find.text('短'));
-      await tester.pumpAndSettle();
-
-      // The selected surface (Stack) still spans screenWidth - 16
-      final selectedStack = find.descendant(
-        of: nodeRowFinders.at(0),
-        matching: find.byType(Stack),
-      );
-      expect(tester.getSize(selectedStack).width, screenWidth - 16.0);
-
-      // The Chevron icon is anchored to the right edge of the screen:
-      // Container right edge is at screenWidth - 8. Icon right edge is at screenWidth - 8 - 6 = screenWidth - 14.
-      final chevronFinder = find.byIcon(Icons.chevron_right);
-      expect(chevronFinder, findsOneWidget);
-      final chevronTopRight = tester.getTopRight(chevronFinder);
-      expect(chevronTopRight.dx, screenWidth - 14.0);
-    },
-  );
-
-  testWidgets(
-    'Light divider in Normal state has 20dp indent and hides in Selected state',
-    (tester) async {
-      await commands.createNode(parentId: null, content: '工作');
-      await commands.createNode(parentId: null, content: '生活');
-      await pumpApp(tester);
-
-      // Normal state: 2 dividers for 2 nodes, both indented at 20.0
-      final dividers = tester
-          .widgetList<Divider>(find.byType(Divider))
-          .toList();
-      expect(dividers, hasLength(2));
-      expect(dividers[0].indent, 20.0);
-      expect(dividers[0].endIndent, 0.0);
-      expect(dividers[1].indent, 20.0);
-      expect(dividers[1].endIndent, 0.0);
-
-      // Tap '工作' to enter Selected state
-      await tester.tap(find.text('工作'));
-      await tester.pumpAndSettle();
-
-      // Selected node hides its divider -> only 1 divider remaining ('生活')
-      final remainingDividers = tester
-          .widgetList<Divider>(find.byType(Divider))
-          .toList();
-      expect(remainingDividers, hasLength(1));
-      expect(remainingDividers[0].indent, 20.0);
-    },
-  );
-
-  testWidgets('New empty node displays placeholder "输入内容…"', (tester) async {
-    await pumpApp(tester);
-
-    // Tap blank area to create transient empty node
-    await tester.tap(find.text('点击空白处开始记录'));
+    // Tap to edit
+    await tester.tap(find.text('Active'));
     await tester.pumpAndSettle();
 
-    final textField = tester.widget<TextField>(find.byType(TextField));
-    expect(textField.decoration?.hintText, '输入内容…');
+    expect(find.byTooltip('更多'), findsOneWidget);
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+
+    // NodeActionMenu opens
+    expect(find.text('复制'), findsOneWidget);
+    expect(find.text('归档'), findsOneWidget);
+    expect(find.text('删除'), findsOneWidget);
   });
 
-  testWidgets(
-    'Node with confirmed empty text is deleted on editing finish, whether newly created or cleared (Spec)',
-    (tester) async {
-      final formal = await commands.createNode(parentId: null, content: '正式节点');
-      await pumpApp(tester);
+  // O. 左右滑动保持
+  testWidgets('O. swipe right indents node', (tester) async {
+    final first = await commands.createNode(parentId: null, content: 'First');
+    final second = await commands.createNode(parentId: null, content: 'Second');
+    await pumpApp(tester);
 
-      // 1st tap: select, 2nd tap: enter editing
-      await tester.tap(find.text('正式节点'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('正式节点'));
-      await tester.pumpAndSettle();
+    // Swipe right on Second by 80dp
+    await tester.drag(find.text('Second'), const Offset(80, 0));
+    await tester.pumpAndSettle();
 
-      expect(find.byType(TextField), findsOneWidget);
-
-      // User clears the text of this existing node
-      await tester.enterText(find.byType(TextField), '   ');
-      await tester.pumpAndSettle();
-
-      // Tap outside on blank area to trigger finish editing
-      await tester.tap(find.byKey(const ValueKey('blank-area')));
-      await tester.pumpAndSettle();
-
-      // Since the actual text was confirmed empty (trimmed), the node is deleted
-      final children = await repository.getChildren(null);
-      expect(children.map((n) => n.id), isNot(contains(formal.id)));
-    },
-  );
-
-  testWidgets(
-    'Node is NEVER deleted if activeText is null (Defensive anti-deletion)',
-    (tester) async {
-      final formal = await commands.createNode(parentId: null, content: '重要数据');
-      await pumpApp(tester);
-
-      // Select formal node
-      await tester.tap(find.text('重要数据'));
-      await tester.pumpAndSettle();
-
-      // In selected mode, tap blank area (which calls _finishActiveEditing)
-      // Since it is not in editing mode, activeText is null
-      await tester.tap(find.byKey(const ValueKey('blank-area')));
-      await tester.pumpAndSettle();
-
-      // The formal node MUST remain intact!
-      final children = await repository.getChildren(null);
-      expect(children.map((n) => n.id), contains(formal.id));
-      expect(children.map((n) => n.content), contains('重要数据'));
-    },
-  );
-
-  testWidgets(
-    'Keyboard dismissal immediately finishes editing and unfocuses node',
-    (tester) async {
-      await commands.createNode(parentId: null, content: '正在编辑');
-      await pumpApp(tester);
-
-      // Double tap to enter editing
-      await tester.tap(find.text('正在编辑'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('正在编辑'));
-      await tester.pumpAndSettle();
-
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(DeepListApp)),
-      );
-      expect(
-        container.read(nodePageControllerProvider(null)).mode,
-        PageMode.editing,
-      );
-
-      // Simulate keyboard opening (bottom inset becomes 300)
-      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
-      await tester.pump();
-
-      // Edit text
-      await tester.enterText(find.byType(TextField), '已经修改');
-      await tester.pump();
-
-      // Simulate system keyboard dismissal (bottom inset drops to 0)
-      tester.view.resetViewInsets();
-      await tester.pumpAndSettle();
-
-      // Editing must be finished!
-      expect(
-        container.read(nodePageControllerProvider(null)).mode,
-        PageMode.normal,
-      );
-      expect(find.byType(TextField), findsNothing);
-
-      // Modified text must be persisted
-      final nodes = await repository.getChildren(null);
-      expect(nodes.first.content, '已经修改');
-    },
-  );
-
-  testWidgets(
-    'Keyboard dismissal on empty node finishes editing and deletes the empty node',
-    (tester) async {
-      await pumpApp(tester);
-
-      // Tap blank area to create empty node and start editing
-      await tester.tap(find.text('点击空白处开始记录'));
-      await tester.pumpAndSettle();
-
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(DeepListApp)),
-      );
-      expect(
-        container.read(nodePageControllerProvider(null)).mode,
-        PageMode.editing,
-      );
-      expect(await repository.getChildren(null), hasLength(1));
-
-      // Simulate keyboard opening
-      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
-      await tester.pump();
-
-      // Simulate keyboard dismissal without typing anything
-      tester.view.resetViewInsets();
-      await tester.pumpAndSettle();
-
-      // Empty node must be cleaned up, and mode returns to normal!
-      expect(
-        container.read(nodePageControllerProvider(null)).mode,
-        PageMode.normal,
-      );
-      expect(await repository.getChildren(null), isEmpty);
-      expect(find.byType(TextField), findsNothing);
-    },
-  );
-
-  testWidgets(
-    'Node displays at 16sp font and allows full multiline text wrapping in normal and editing modes',
-    (tester) async {
-      await commands.createNode(
-        parentId: null,
-        content: '这是一段很长的文本，用来测试在普通态和编辑态下是否都会自动折行显示，而不会被截断为单行。',
-      );
-      await pumpApp(tester);
-
-      // Verify normal display text: 16sp, no maxLines (multiline), no overflow ellipsis
-      final textFinder = find.byType(Text);
-      final textWidget = tester.widget<Text>(textFinder.first);
-      expect(textWidget.style?.fontSize, 16);
-      expect(textWidget.maxLines, isNull);
-      expect(textWidget.overflow, isNull);
-
-      // Enter editing mode (tap once to select, second tap to edit)
-      await tester.tap(textFinder.first);
-      await tester.pumpAndSettle();
-      await tester.tap(textFinder.first);
-      await tester.pumpAndSettle();
-
-      // Verify editing mode TextField: 16sp, minLines 1, maxLines null (multiline)
-      final textField = tester.widget<TextField>(find.byType(TextField));
-      expect(textField.style?.fontSize, 16);
-      expect(textField.minLines, 1);
-      expect(textField.maxLines, isNull);
-    },
-  );
-
-  testWidgets(
-    'Non-empty node Enter: newly created empty node persists and maintains focus across keyboard jitter',
-    (tester) async {
-      await commands.createNode(parentId: null, content: 'NonEmpty');
-      await pumpApp(tester);
-
-      // Simulate keyboard open
-      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
-      await tester.pump();
-
-      // Enter editing
-      await tester.tap(find.text('NonEmpty'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('NonEmpty'));
-      await tester.pumpAndSettle();
-
-      // Press Enter
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pump();
-
-      // Simulate keyboard fluctuation/metrics jitter during focus transition
-      tester.view.viewInsets = const FakeViewPadding(bottom: 0);
-      await tester.pump();
-      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
-      await tester.pumpAndSettle();
-
-      // Both original and new empty node must persist in the tree!
-      final nodes = await repository.getChildren(null);
-      expect(nodes.map((n) => n.content), ['NonEmpty', '']);
-
-      // New node must remain in editing mode and maintain focus
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(DeepListApp)),
-      );
-      expect(
-        container.read(nodePageControllerProvider(null)).mode,
-        PageMode.editing,
-      );
-      final newField = tester.widget<TextField>(find.byType(TextField));
-      expect(newField.focusNode!.hasFocus, isTrue);
-
-      tester.view.resetViewInsets();
-    },
-  );
-
-  testWidgets(
-    'Empty node Enter: safely deleted once, exits editing, and NEVER shows error SnackBar',
-    (tester) async {
-      await pumpApp(tester);
-
-      // Tap blank area to create an empty node and start editing
-      await tester.tap(find.text('点击空白处开始记录'));
-      await tester.pumpAndSettle();
-
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(DeepListApp)),
-      );
-      expect(
-        container.read(nodePageControllerProvider(null)).mode,
-        PageMode.editing,
-      );
-      expect(await repository.getChildren(null), hasLength(1));
-
-      // Simulate keyboard open
-      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
-      await tester.pump();
-
-      // Press Enter on the empty node
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-
-      // Simulate keyboard dismissal concurrently
-      tester.view.resetViewInsets();
-      await tester.pumpAndSettle();
-
-      // Node is safely deleted, mode is normal
-      expect(await repository.getChildren(null), isEmpty);
-      expect(
-        container.read(nodePageControllerProvider(null)).mode,
-        PageMode.normal,
-      );
-
-      // MUST NOT have any error SnackBar!
-      expect(find.byType(SnackBar), findsNothing);
-    },
-  );
-
-  testWidgets(
-    'Empty node Indent via keyboard toolbar safely deletes it without moving',
-    (tester) async {
-      final first = await commands.createNode(
-        parentId: null,
-        content: 'Existing',
-      );
-      await pumpApp(tester);
-
-      // Create an empty trailing node and enter editing
-      await tester.tap(find.byKey(const ValueKey('blank-area')));
-      await tester.pumpAndSettle();
-
-      // Empty node has previous sibling 'Existing', so Indent is enabled on KeyboardToolbar
-      expect(find.byTooltip('Indent'), findsOneWidget);
-
-      // Tap Indent on empty node
-      await tester.tap(find.byTooltip('Indent'));
-      await tester.pumpAndSettle();
-
-      // The empty node must be cleanly deleted!
-      // Must NOT remain as a child of Existing
-      expect(await repository.getChildren(first.id), isEmpty);
-      // Root list should only contain Existing
-      final rootNodes = await repository.getChildren(null);
-      expect(rootNodes.map((n) => n.content), ['Existing']);
-
-      // Editing session must end cleanly, mode returns to normal
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(DeepListApp)),
-      );
-      expect(
-        container.read(nodePageControllerProvider(null)).mode,
-        PageMode.normal,
-      );
-    },
-  );
-
-  testWidgets(
-    'Empty node Outdent via keyboard toolbar safely deletes it without moving',
-    (tester) async {
-      final parent = await commands.createNode(
-        parentId: null,
-        content: 'Parent',
-      );
-      await pumpApp(tester);
-
-      // Enter Parent subpage
-      await tester.tap(find.text('Parent'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.chevron_right));
-      await tester.pumpAndSettle();
-
-      // Inside Parent: create an empty node and enter editing
-      await tester.tap(find.byKey(const ValueKey('blank-area')));
-      await tester.pumpAndSettle();
-
-      // Empty node has parentId != null, so Outdent is enabled on KeyboardToolbar
-      expect(find.byTooltip('Outdent'), findsOneWidget);
-
-      // Tap Outdent on empty node
-      await tester.tap(find.byTooltip('Outdent'));
-      await tester.pumpAndSettle();
-
-      // The empty node must be cleanly deleted!
-      // Must NOT be elevated to root or remain anywhere
-      expect(await repository.getChildren(parent.id), isEmpty);
-      expect(await repository.getChildren(null), hasLength(1));
-
-      // Mode returns to normal
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(DeepListApp)),
-      );
-      expect(
-        container.read(nodePageControllerProvider(parent.id)).mode,
-        PageMode.normal,
-      );
-    },
-  );
+    final updated = await repository.getNode(second.id);
+    expect(updated!.parentId, first.id);
+  });
 }

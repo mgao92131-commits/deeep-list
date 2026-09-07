@@ -65,6 +65,82 @@ class TreeCommandService {
     });
   }
 
+  Future<Node> copySubtree({
+    required NodeId sourceNodeId,
+    required NodeId? targetParentId,
+    required int targetPosition,
+  }) {
+    return _repository.transaction((transaction) async {
+      final sourceRoot = await _requireNode(transaction, sourceNodeId);
+      if (targetParentId != null) {
+        await _requireNode(transaction, targetParentId);
+      }
+
+      final targetSiblings = await transaction.getChildren(
+        targetParentId,
+        includeArchived: true,
+      );
+      final insertion = _clampPosition(targetPosition, targetSiblings.length);
+
+      // BFS traverse to gather all descendants in order
+      final nodesToCopy = <Node>[sourceRoot];
+      final queue = <NodeId>[sourceNodeId];
+      while (queue.isNotEmpty) {
+        final currentId = queue.removeAt(0);
+        final children = await transaction.getChildren(
+          currentId,
+          includeArchived: true,
+        );
+        for (final child in children) {
+          nodesToCopy.add(child);
+          queue.add(child.id);
+        }
+      }
+
+      final idMap = <NodeId, NodeId>{};
+      for (final node in nodesToCopy) {
+        idMap[node.id] = _uuid.v4();
+      }
+
+      final now = _clock();
+      final newRoot = Node(
+        id: idMap[sourceRoot.id]!,
+        parentId: targetParentId,
+        position: insertion,
+        content: sourceRoot.content,
+        note: sourceRoot.note,
+        isDone: sourceRoot.isDone,
+        isFavorite: sourceRoot.isFavorite,
+        isArchived: false,
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      final newOrdered = [...targetSiblings]..insert(insertion, newRoot);
+      await _saveOrdered(transaction, newOrdered);
+
+      for (final oldNode in nodesToCopy) {
+        if (oldNode.id == sourceRoot.id) continue;
+        final newParentId = idMap[oldNode.parentId]!;
+        final newNode = Node(
+          id: idMap[oldNode.id]!,
+          parentId: newParentId,
+          position: oldNode.position,
+          content: oldNode.content,
+          note: oldNode.note,
+          isDone: oldNode.isDone,
+          isFavorite: oldNode.isFavorite,
+          isArchived: oldNode.isArchived,
+          createdAt: now,
+          updatedAt: now,
+        );
+        await transaction.saveNode(newNode);
+      }
+
+      return newRoot;
+    });
+  }
+
   Future<void> moveNode({
     required NodeId nodeId,
     required NodeId? newParentId,

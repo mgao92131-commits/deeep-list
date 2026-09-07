@@ -11,10 +11,9 @@ import 'widgets/node_row.dart';
 class NodeList extends StatelessWidget {
   final List<VisibleNodeItem> items;
   final NodeId? parentId;
-  final NodeId? selectedNodeId;
   final NodeId? editingNodeId;
   final EditorSession editorSession;
-  final void Function(NodeId id) onSelect;
+  final void Function(Node node) onLongPress;
   final Future<void> Function(Node node) onStartEditing;
   final Future<void> Function(NodeId id, String text) onCommit;
   final void Function(Node node, String text) onChanged;
@@ -34,10 +33,9 @@ class NodeList extends StatelessWidget {
     super.key,
     required this.items,
     required this.parentId,
-    required this.selectedNodeId,
     required this.editingNodeId,
     required this.editorSession,
-    required this.onSelect,
+    required this.onLongPress,
     required this.onStartEditing,
     required this.onCommit,
     required this.onChanged,
@@ -94,26 +92,35 @@ class NodeList extends StatelessWidget {
             onReorderItem: _handleReorder,
             itemBuilder: (context, index) {
               final item = items[index];
-              return ReorderableDelayedDragStartListener(
-                key: ValueKey(item.id),
+              final dragHandle = ReorderableDragStartListener(
                 index: index,
                 enabled: editingNodeId == null,
-                child: NodeRow(
-                  item: item,
-                  isSelected: selectedNodeId == item.id,
-                  isEditing: editingNodeId == item.id,
-                  editorSession: editorSession,
-                  onSelect: () => onSelect(item.id),
-                  onStartEditing: () => onStartEditing(item.node),
-                  onNavigate: () => onNavigate(item.node),
-                  onCommit: (text) => onCommit(item.id, text),
-                  onChanged: (text) => onChanged(item.node, text),
-                  onBlur: onBlur,
-                  onEnter: (cursor, text) => onEnter(item.node, cursor, text),
-                  onBackspaceEmpty: () => onBackspaceEmpty(item.node),
-                  onIndent: () => onIndent(item.id),
-                  onOutdent: () => onOutdent(item.id),
+                child: Center(
+                  child: Icon(
+                    Icons.drag_indicator,
+                    size: 20,
+                    color: theme.colorScheme.onSurfaceVariant.withValues(
+                      alpha: 0.38,
+                    ),
+                  ),
                 ),
+              );
+              return NodeRow(
+                key: ValueKey(item.id),
+                item: item,
+                isEditing: editingNodeId == item.id,
+                editorSession: editorSession,
+                dragHandle: dragHandle,
+                onLongPress: () => onLongPress(item.node),
+                onStartEditing: () => onStartEditing(item.node),
+                onNavigate: () => onNavigate(item.node),
+                onCommit: (text) => onCommit(item.id, text),
+                onChanged: (text) => onChanged(item.node, text),
+                onBlur: onBlur,
+                onEnter: (cursor, text) => onEnter(item.node, cursor, text),
+                onBackspaceEmpty: () => onBackspaceEmpty(item.node),
+                onIndent: () => onIndent(item.id),
+                onOutdent: () => onOutdent(item.id),
               );
             },
           ),

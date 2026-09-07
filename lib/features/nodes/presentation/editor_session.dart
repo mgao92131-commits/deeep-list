@@ -87,6 +87,26 @@ class EditorSession {
     _schedulePendingFocus();
   }
 
+  void handoverFocus(NodeId from, NodeId to, {int? cursor}) {
+    if (_disposed) return;
+    suppressBlurCommit(from);
+    _pendingFocusNodeId = to;
+    _pendingCursor = cursor;
+    final toRegistration = _registrations[to];
+    if (toRegistration != null) {
+      activeNodeId = to;
+      toRegistration.focusNode.requestFocus();
+      final length = toRegistration.controller.text.length;
+      final offset = (cursor ?? length).clamp(0, length).toInt();
+      toRegistration.controller.selection = TextSelection.collapsed(
+        offset: offset,
+      );
+    } else {
+      _schedulePendingFocus();
+    }
+    allowBlurCommit(from);
+  }
+
   void unfocus() {
     // Clear the active editor before unfocusing its FocusNode. This lets the
     // card distinguish an explicit session shutdown from an ordinary blur and

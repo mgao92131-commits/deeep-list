@@ -9,11 +9,13 @@ class ClipboardController extends _$ClipboardController {
   @override
   NodeId? build() => null;
 
-  void cut(NodeId nodeId) {
+  void copy(NodeId nodeId) {
     state = nodeId;
   }
 
   void clear() {
     state = null;
   }
+
+  bool get hasContent => state != null;
 }

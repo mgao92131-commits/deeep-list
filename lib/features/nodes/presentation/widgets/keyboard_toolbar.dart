@@ -6,6 +6,7 @@ class KeyboardToolbar extends StatelessWidget {
   final VoidCallback onOutdent;
   final VoidCallback onIndent;
   final VoidCallback onDone;
+  final VoidCallback? onMore;
 
   const KeyboardToolbar({
     super.key,
@@ -14,6 +15,7 @@ class KeyboardToolbar extends StatelessWidget {
     required this.onOutdent,
     required this.onIndent,
     required this.onDone,
+    this.onMore,
   });
 
   @override
@@ -53,6 +55,15 @@ class KeyboardToolbar extends StatelessWidget {
             onPressed: canIndent ? onIndent : null,
             visualDensity: VisualDensity.compact,
           ),
+          if (onMore != null) ...[
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.more_horiz, size: 20),
+              tooltip: '更多',
+              onPressed: onMore,
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
           const Spacer(),
           // 完成 (Done) button
           TextButton(

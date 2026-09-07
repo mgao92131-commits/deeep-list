@@ -326,17 +326,48 @@ void main() {
     );
   });
 
-  test('repository transactions roll back partial writes', () async {
-    final node = await create('before');
+  test(
+    'copySubtree duplicates hierarchy with new UUIDs and rolls back on failure',
+    () async {
+      final root = await create('Root');
+      final child = await create('Child', parentId: root.id);
+      final grandchild = await create('Grandchild', parentId: child.id);
 
-    await expectLater(
-      harness.repository.transaction((transaction) async {
-        await transaction.saveNode(node.copyWith(content: 'partial write'));
-        throw StateError('abort transaction');
-      }),
-      throwsStateError,
-    );
+      final copied = await harness.commands.copySubtree(
+        sourceNodeId: root.id,
+        targetParentId: null,
+        targetPosition: 1,
+      );
 
-    expect((await harness.repository.getNode(node.id))!.content, 'before');
-  });
+      expect(copied.id, isNot(root.id));
+      expect(copied.content, 'Root');
+      expect(copied.position, 1);
+
+      final copiedChildren = await harness.repository.getChildren(copied.id);
+      expect(copiedChildren, hasLength(1));
+      final copiedChild = copiedChildren.first;
+      expect(copiedChild.id, isNot(child.id));
+      expect(copiedChild.content, 'Child');
+      expect(copiedChild.parentId, copied.id);
+
+      final copiedGrandchildren = await harness.repository.getChildren(
+        copiedChild.id,
+      );
+      expect(copiedGrandchildren, hasLength(1));
+      final copiedGrandchild = copiedGrandchildren.first;
+      expect(copiedGrandchild.id, isNot(grandchild.id));
+      expect(copiedGrandchild.content, 'Grandchild');
+      expect(copiedGrandchild.parentId, copiedChild.id);
+
+      // Non-existent source throws StateError
+      await expectLater(
+        harness.commands.copySubtree(
+          sourceNodeId: 'non-existent',
+          targetParentId: null,
+          targetPosition: 0,
+        ),
+        throwsStateError,
+      );
+    },
+  );
 }

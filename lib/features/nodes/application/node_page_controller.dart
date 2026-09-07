@@ -4,7 +4,7 @@ import '../domain/node_id.dart';
 
 part 'node_page_controller.g.dart';
 
-enum PageMode { normal, selected, editing, dragging }
+enum PageMode { normal, editing, dragging }
 
 class NodePageState {
   final PageMode mode;
@@ -13,23 +13,16 @@ class NodePageState {
   const NodePageState({this.mode = PageMode.normal, this.activeNodeId});
 
   NodeId? get editingNodeId => mode == PageMode.editing ? activeNodeId : null;
-  NodeId? get selectedNodeId => mode == PageMode.selected ? activeNodeId : null;
   NodeId? get draggingNodeId => mode == PageMode.dragging ? activeNodeId : null;
 
   bool get isNormal => mode == PageMode.normal;
-  bool get isSelected => mode == PageMode.selected;
   bool get isEditing => mode == PageMode.editing;
   bool get isDragging => mode == PageMode.dragging;
 
-  bool isNodeSelected(NodeId id) =>
-      mode == PageMode.selected && activeNodeId == id;
   bool isNodeEditing(NodeId id) =>
       mode == PageMode.editing && activeNodeId == id;
   bool isNodeDragging(NodeId id) =>
       mode == PageMode.dragging && activeNodeId == id;
-
-  Set<NodeId> get selectedNodeIds =>
-      selectedNodeId != null ? {selectedNodeId!} : const <NodeId>{};
 
   NodePageState copyWith({PageMode? mode, Object? activeNodeId = _unset}) {
     return NodePageState(
@@ -48,10 +41,6 @@ class NodePageController extends _$NodePageController {
   @override
   NodePageState build(NodeId? parentId) => const NodePageState();
 
-  void selectNode(NodeId nodeId) {
-    state = NodePageState(mode: PageMode.selected, activeNodeId: nodeId);
-  }
-
   void startEditing(NodeId nodeId) {
     state = NodePageState(mode: PageMode.editing, activeNodeId: nodeId);
   }
@@ -66,13 +55,5 @@ class NodePageController extends _$NodePageController {
 
   void toNormal() {
     state = const NodePageState();
-  }
-
-  void toggleSelection(NodeId nodeId) {
-    if (state.isNodeSelected(nodeId)) {
-      toNormal();
-    } else {
-      selectNode(nodeId);
-    }
   }
 }

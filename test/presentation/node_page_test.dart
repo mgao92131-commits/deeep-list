@@ -55,33 +55,23 @@ void main() {
     },
   );
 
-  testWidgets(
-    'first tap selects node, second tap on text enters editing mode',
-    (tester) async {
-      await commands.createNode(parentId: null, content: 'TestNode');
-      await pumpApp(tester);
+  testWidgets('tap directly enters editing mode without selected state', (
+    tester,
+  ) async {
+    final node = await commands.createNode(parentId: null, content: 'TestNode');
+    await pumpApp(tester);
 
-      // 1st tap: select
-      await tester.tap(find.text('TestNode'));
-      await tester.pumpAndSettle();
+    // 1st tap: edit directly
+    await tester.tap(find.text('TestNode'));
+    await tester.pumpAndSettle();
 
-      expect(find.byType(TextField), findsNothing);
-      expect(
-        find.byTooltip('Open'),
-        findsOneWidget,
-      ); // Chevron visible in Selected state
-
-      // 2nd tap: edit
-      await tester.tap(find.text('TestNode'));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(TextField), findsOneWidget);
-      expect(
-        find.byTooltip('Open'),
-        findsNothing,
-      ); // Chevron hidden in Editing state
-    },
-  );
+    expect(find.byType(TextField), findsOneWidget);
+    final controller = ProviderScope.containerOf(
+      tester.element(find.byType(DeepListApp)),
+    ).read(nodePageControllerProvider(null));
+    expect(controller.mode, PageMode.editing);
+    expect(controller.editingNodeId, node.id);
+  });
 
   testWidgets('Enter on non-empty node creates new sibling and focuses it', (
     tester,
@@ -381,17 +371,17 @@ void main() {
     },
   );
 
-  testWidgets('Selected Bottom Toolbar allows deleting selected node', (
+  testWidgets('long press node opens NodeActionMenu and allows deleting', (
     tester,
   ) async {
     await commands.createNode(parentId: null, content: 'ToDelete');
     await pumpApp(tester);
 
-    // Tap to select
-    await tester.tap(find.text('ToDelete'));
+    // Long press to open menu
+    await tester.longPress(find.text('ToDelete'));
     await tester.pumpAndSettle();
 
-    // Selection toolbar is shown with delete button
+    // NodeActionMenu is shown with delete button
     expect(find.text('删除'), findsOneWidget);
     await tester.tap(find.text('删除'));
     await tester.pumpAndSettle();
@@ -493,10 +483,7 @@ void main() {
         parentId: null,
         content: 'Parent A',
       );
-      await commands.createNode(
-        parentId: null,
-        content: 'Parent B',
-      );
+      await commands.createNode(parentId: null, content: 'Parent B');
       // Create 3 children under Parent A (2 active, 1 archived)
       await commands.createNode(parentId: parentA.id, content: 'Child A1');
       await commands.createNode(parentId: parentA.id, content: 'Child A2');
@@ -512,13 +499,13 @@ void main() {
         tester.element(find.byType(DeepListApp)),
       );
 
-      // Rule 1: Normal state:
-      // Parent A has 2 unarchived children -> shows "2"
+      // Rule: childCount > 0 shows number, chevron permanently exists on all rows
+      // Parent A has 2 unarchived children -> shows "2" and chevron
       expect(find.text('2'), findsOneWidget);
-      // Parent B has 0 children -> shows chevron_right
-      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+      // Both Parent A and Parent B show chevron_right
+      expect(find.byIcon(Icons.chevron_right), findsNWidgets(2));
 
-      // Rule 1 verification: Tap count '2' in Normal directly enters subpage without prior selection!
+      // Tap count '2' or chevron in Normal directly enters subpage!
       await tester.tap(find.text('2'));
       await tester.pumpAndSettle();
       expect(find.text('Child A1'), findsOneWidget);
@@ -529,8 +516,8 @@ void main() {
       await tester.pageBack();
       await tester.pumpAndSettle();
 
-      // Rule 3 verification: Tap chevron on Parent B (childCount == 0) directly enters empty subpage!
-      await tester.tap(find.byIcon(Icons.chevron_right));
+      // Tap chevron on Parent B directly enters empty subpage!
+      await tester.tap(find.byIcon(Icons.chevron_right).last);
       await tester.pumpAndSettle();
       expect(find.text('Parent B'), findsWidgets);
       expect(find.text('点击空白处开始记录'), findsOneWidget);
@@ -539,43 +526,26 @@ void main() {
       await tester.pageBack();
       await tester.pumpAndSettle();
 
-      // Rule 2 & 5: Tap Parent A text once -> enters Selected mode
-      await tester.tap(find.text('Parent A'));
-      await tester.pumpAndSettle();
-      // Right side STILL displays number '2', does NOT turn into chevron!
-      expect(find.text('2'), findsOneWidget);
-      // Tapping '2' in Selected mode also navigates
-      await tester.tap(find.text('2'));
-      await tester.pumpAndSettle();
-      expect(find.text('Child A1'), findsOneWidget);
-
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-
-      // Rule 4: Tap Parent B text once -> enters Selected mode
-      await tester.tap(find.text('Parent B'));
-      await tester.pumpAndSettle();
-      // Right side STILL displays chevron_right!
-      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
-
-      // Rule 5: Tap Parent B text a second time -> enters Editing mode
+      // Tap Parent B text once -> directly enters Editing mode
       await tester.tap(find.text('Parent B'));
       await tester.pumpAndSettle();
       expect(find.byType(TextField), findsOneWidget);
 
-      // Rule 7: Editing mode -> trailing slot is empty (no chevron, no number)
-      expect(find.byIcon(Icons.chevron_right), findsNothing);
-      expect(find.text('2'), findsOneWidget); // only on Parent A
+      // Even in Editing mode, chevrons remain permanently visible
+      expect(find.byIcon(Icons.chevron_right), findsNWidgets(2));
+      expect(find.text('2'), findsOneWidget);
 
       // Exit editing to normal
       container.read(nodePageControllerProvider(null).notifier).toNormal();
       await tester.pumpAndSettle();
 
-      // Rule 6: Dragging mode -> trailing slot preserves child count and chevron
-      container.read(nodePageControllerProvider(null).notifier).startDragging(parentA.id);
+      // Dragging mode -> trailing slot preserves child count and chevrons
+      container
+          .read(nodePageControllerProvider(null).notifier)
+          .startDragging(parentA.id);
       await tester.pump();
-      expect(find.text('2'), findsOneWidget); // number 2 persists on Parent A
-      expect(find.byIcon(Icons.chevron_right), findsOneWidget); // chevron persists on Parent B
+      expect(find.text('2'), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right), findsNWidgets(2));
     },
   );
 

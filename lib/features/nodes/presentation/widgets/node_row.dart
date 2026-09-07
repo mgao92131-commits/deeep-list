@@ -8,10 +8,8 @@ import '../models/visible_node_item.dart';
 
 class NodeRow extends StatefulWidget {
   final VisibleNodeItem item;
-  final bool isSelected;
   final bool isEditing;
   final EditorSession editorSession;
-  final VoidCallback onSelect;
   final VoidCallback onStartEditing;
   final Future<void> Function() onNavigate;
   final Future<void> Function(String text) onCommit;
@@ -22,14 +20,13 @@ class NodeRow extends StatefulWidget {
   final VoidCallback onIndent;
   final VoidCallback onOutdent;
   final VoidCallback? onLongPress;
+  final Widget? dragHandle;
 
   const NodeRow({
     super.key,
     required this.item,
-    required this.isSelected,
     required this.isEditing,
     required this.editorSession,
-    required this.onSelect,
     required this.onStartEditing,
     required this.onNavigate,
     required this.onCommit,
@@ -40,6 +37,7 @@ class NodeRow extends StatefulWidget {
     required this.onIndent,
     required this.onOutdent,
     this.onLongPress,
+    this.dragHandle,
   });
 
   @override
@@ -266,9 +264,9 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
       decoration: widget.item.isDone ? TextDecoration.lineThrough : null,
     );
 
-    final selectionColor = widget.isSelected
-        ? theme.colorScheme.primary.withValues(alpha: 0.08)
-        : Colors.transparent;
+    final actualLeftPadding = widget.dragHandle != null
+        ? 36.0
+        : innerLeftPadding;
 
     Widget content;
     if (widget.isEditing) {
@@ -327,11 +325,8 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
             : _onHorizontalDragCancel,
         onLongPress: widget.isEditing ? null : widget.onLongPress,
         onTap: () {
-          if (widget.isEditing) return;
-          if (widget.isSelected) {
+          if (!widget.isEditing) {
             widget.onStartEditing();
-          } else {
-            widget.onSelect();
           }
         },
         child: Column(
@@ -340,25 +335,33 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
           children: [
             Transform.translate(
               offset: Offset(_dragOffset, 0),
-              child: AnimatedContainer(
+              child: Container(
                 width: double.infinity,
-                duration: const Duration(milliseconds: 140),
                 margin: const EdgeInsets.symmetric(
                   horizontal: horizontalMargin,
                   vertical: 2,
                 ),
-                constraints: BoxConstraints(minHeight: minHeight),
+                constraints: const BoxConstraints(minHeight: minHeight),
                 decoration: BoxDecoration(
-                  color: selectionColor,
+                  color: Colors.transparent,
                   borderRadius: BorderRadius.circular(11),
                 ),
                 child: Stack(
                   alignment: Alignment.centerLeft,
                   children: [
+                    // Independent Drag Handle
+                    if (widget.dragHandle != null)
+                      Positioned(
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: 32,
+                        child: widget.dragHandle!,
+                      ),
                     // Main text content (left and right edge paddings are permanent)
                     Padding(
-                      padding: const EdgeInsets.only(
-                        left: innerLeftPadding,
+                      padding: EdgeInsets.only(
+                        left: actualLeftPadding,
                         right: rightPadding,
                         top: 12,
                         bottom: 12,
@@ -377,15 +380,14 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
                 ),
               ),
             ),
-            // Light divider in Normal (non-selected) state
-            if (!widget.isSelected)
-              Divider(
-                height: 1,
-                thickness: 0.8,
-                indent: dividerIndent,
-                endIndent: 0,
-                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
-              ),
+            // Light divider
+            Divider(
+              height: 1,
+              thickness: 0.8,
+              indent: dividerIndent,
+              endIndent: 0,
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+            ),
           ],
         ),
       ),
@@ -393,35 +395,6 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
   }
 
   Widget _buildTrailingSlot(ThemeData theme) {
-    if (widget.isEditing) {
-      return const SizedBox(width: 48);
-    }
-
-    Widget trailingContent;
-    if (widget.item.childCount > 0) {
-      trailingContent = Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 8),
-        child: Text(
-          '${widget.item.childCount}',
-          style: TextStyle(
-            fontSize: 13,
-            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-          ),
-        ),
-      );
-    } else {
-      trailingContent = Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 6),
-        child: Icon(
-          Icons.chevron_right,
-          size: 20,
-          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45),
-        ),
-      );
-    }
-
     return Tooltip(
       message: 'Open',
       child: GestureDetector(
@@ -429,7 +402,35 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
         onTap: () => unawaited(widget.onNavigate()),
         child: SizedBox(
           width: 48,
-          child: trailingContent,
+          child: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (widget.item.childCount > 0) ...[
+                  Text(
+                    '${widget.item.childCount}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: theme.colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.6,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                ],
+                Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: theme.colorScheme.onSurfaceVariant.withValues(
+                    alpha: 0.45,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

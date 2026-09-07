@@ -46,9 +46,7 @@ class DriftNodeRepository implements TreeMutationRepository {
   }
 
   @override
-  Stream<Map<NodeId, int>> watchAllChildCounts({
-    bool includeArchived = false,
-  }) {
+  Stream<Map<NodeId, int>> watchAllChildCounts({bool includeArchived = false}) {
     final countCol = database.nodes.id.count();
     final query = database.selectOnly(database.nodes)
       ..addColumns([database.nodes.parentId, countCol])

@@ -42,7 +42,7 @@ final class ClipboardControllerProvider
 }
 
 String _$clipboardControllerHash() =>
-    r'9b8bbece735adbd95f7b011fef7698022c8d46d5';
+    r'3f37c981f55e0d1a901ecfca2289ec293281e179';
 
 abstract class _$ClipboardController extends $Notifier<NodeId?> {
   NodeId? build();

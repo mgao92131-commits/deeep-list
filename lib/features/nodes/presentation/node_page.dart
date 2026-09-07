@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/providers.dart';
 import '../../../app/router.dart';
+import '../application/clipboard_controller.dart';
 import '../application/node_page_controller.dart';
 import '../domain/node.dart';
 import '../domain/node_id.dart';
@@ -15,7 +16,7 @@ import 'models/visible_node_item.dart';
 import 'node_list.dart';
 import 'providers/visible_nodes_provider.dart';
 import 'widgets/keyboard_toolbar.dart';
-import 'widgets/selection_toolbar.dart';
+import 'widgets/node_action_menu.dart';
 
 class NodePage extends ConsumerStatefulWidget {
   final NodeId? parentId;
@@ -191,8 +192,31 @@ class _NodePageState extends ConsumerState<NodePage>
     final currentEditingId = ref
         .read(nodePageControllerProvider(widget.parentId))
         .editingNodeId;
-    if (currentEditingId != null && currentEditingId != node.id) {
-      await _finishActiveEditing(discardIfEmpty: true);
+    if (currentEditingId == node.id) return;
+
+    if (currentEditingId != null) {
+      final activeText = _editorSession.activeText;
+      if (activeText != null && activeText.trim().isEmpty) {
+        _editorSession.suppressBlurCommit(currentEditingId);
+        try {
+          await _deleteEmptyNode(currentEditingId);
+        } finally {
+          _editorSession.allowBlurCommit(currentEditingId);
+        }
+      } else {
+        await _flushPendingEdit(commitCurrent: true, unfocus: false);
+      }
+
+      if (!mounted) return;
+      ref
+          .read(nodePageControllerProvider(widget.parentId).notifier)
+          .startEditing(node.id);
+      _editorSession.handoverFocus(
+        currentEditingId,
+        node.id,
+        cursor: node.content.length,
+      );
+      return;
     }
 
     if (!mounted) return;
@@ -202,20 +226,6 @@ class _NodePageState extends ConsumerState<NodePage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _editorSession.focus(node.id, cursor: node.content.length);
     });
-  }
-
-  Future<void> _selectNode(NodeId nodeId) async {
-    final currentEditingId = ref
-        .read(nodePageControllerProvider(widget.parentId))
-        .editingNodeId;
-    if (currentEditingId != null) {
-      await _finishActiveEditing(discardIfEmpty: true);
-    }
-
-    if (!mounted) return;
-    ref
-        .read(nodePageControllerProvider(widget.parentId).notifier)
-        .selectNode(nodeId);
   }
 
   Future<void> _deleteEmptyNode(NodeId nodeId) async {
@@ -314,7 +324,10 @@ class _NodePageState extends ConsumerState<NodePage>
     await _mutationQueue.idle;
   }
 
-  Future<bool> _flushPendingEdit({required bool commitCurrent}) async {
+  Future<bool> _flushPendingEdit({
+    required bool commitCurrent,
+    bool unfocus = true,
+  }) async {
     _autosaveTimer?.cancel();
     _autosaveTimer = null;
     final pendingNodeId = _pendingAutosaveNodeId;
@@ -340,7 +353,9 @@ class _NodePageState extends ConsumerState<NodePage>
     final inFlight = _autosaveInFlight;
     if (inFlight != null && !await inFlight) saved = false;
     await _mutationQueue.idle;
-    _editorSession.unfocus();
+    if (unfocus) {
+      _editorSession.unfocus();
+    }
     return saved;
   }
 
@@ -509,9 +524,38 @@ class _NodePageState extends ConsumerState<NodePage>
     }
   }
 
-  // Spec 18-19 & Issue 4: Blank Area Click -> 1 tap creates transient empty node and edits
+  // Blank Area Click -> create transient empty node and edit seamlessly
   Future<void> _createTrailingNode() async {
-    await _finishActiveEditing(discardIfEmpty: true);
+    final currentEditingId = ref
+        .read(nodePageControllerProvider(widget.parentId))
+        .editingNodeId;
+
+    if (currentEditingId != null) {
+      final activeText = _editorSession.activeText;
+      if (activeText != null && activeText.trim().isEmpty) {
+        _editorSession.suppressBlurCommit(currentEditingId);
+        try {
+          await _deleteEmptyNode(currentEditingId);
+        } finally {
+          _editorSession.allowBlurCommit(currentEditingId);
+        }
+      } else {
+        await _flushPendingEdit(commitCurrent: true, unfocus: false);
+      }
+
+      final node = await _runMutation(
+        () => ref
+            .read(treeCommandServiceProvider)
+            .createNode(parentId: widget.parentId, content: ''),
+      );
+      if (node == null || !mounted) return;
+      ref
+          .read(nodePageControllerProvider(widget.parentId).notifier)
+          .startEditing(node.id);
+      _editorSession.handoverFocus(currentEditingId, node.id, cursor: 0);
+      return;
+    }
+
     final node = await _runMutation(
       () => ref
           .read(treeCommandServiceProvider)
@@ -530,16 +574,74 @@ class _NodePageState extends ConsumerState<NodePage>
     context.push('/node/${node.id}');
   }
 
-  Future<void> _deleteSelectedNode(NodeId nodeId) async {
-    await _runMutation(
-      () => ref.read(treeCommandServiceProvider).deleteSubtree(nodeId),
+  Future<void> _openActionMenu(Node node) async {
+    final clipboardNodeId = ref.read(clipboardControllerProvider);
+    final canPaste = clipboardNodeId != null;
+
+    await NodeActionMenu.show(
+      context,
+      node: node,
+      canPaste: canPaste,
+      onCopy: () {
+        ref.read(clipboardControllerProvider.notifier).copy(node.id);
+      },
+      onPaste: canPaste
+          ? () async {
+              try {
+                await _runMutation(
+                  () => ref
+                      .read(treeCommandServiceProvider)
+                      .copySubtree(
+                        sourceNodeId: clipboardNodeId,
+                        targetParentId: node.parentId,
+                        targetPosition: node.position + 1,
+                      ),
+                );
+              } catch (error) {
+                ref.read(clipboardControllerProvider.notifier).clear();
+                if (mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('复制的节点已不存在')));
+                }
+              }
+            }
+          : null,
+      onArchive: () async {
+        final currentEditingId = ref
+            .read(nodePageControllerProvider(widget.parentId))
+            .editingNodeId;
+        if (currentEditingId != null) {
+          await _finishActiveEditing(discardIfEmpty: false);
+        }
+        await _runMutation(
+          () => ref.read(treeCommandServiceProvider).archiveNode(node.id),
+        );
+        if (mounted) {
+          ref
+              .read(nodePageControllerProvider(widget.parentId).notifier)
+              .toNormal();
+        }
+      },
+      onDelete: () async {
+        final currentEditingId = ref
+            .read(nodePageControllerProvider(widget.parentId))
+            .editingNodeId;
+        if (currentEditingId != null) {
+          _editorSession.unfocus();
+          if (mounted) {
+            ref
+                .read(nodePageControllerProvider(widget.parentId).notifier)
+                .toNormal();
+          }
+        }
+        await _runMutation(
+          () => ref.read(treeCommandServiceProvider).deleteSubtree(node.id),
+        );
+      },
     );
-    if (mounted) {
-      ref.read(nodePageControllerProvider(widget.parentId).notifier).toNormal();
-    }
   }
 
-  // Spec 35: Back behavior
   Future<void> _handleBack() async {
     final pageState = ref.read(nodePageControllerProvider(widget.parentId));
     final controller = ref.read(
@@ -548,23 +650,7 @@ class _NodePageState extends ConsumerState<NodePage>
 
     switch (pageState.mode) {
       case PageMode.editing:
-        final activeId = pageState.editingNodeId;
-        final activeText = _editorSession.activeText;
-        if (activeId != null &&
-            (activeText == null || activeText.trim().isEmpty)) {
-          await _deleteEmptyNode(activeId);
-          controller.toNormal();
-        } else {
-          await _flushPendingEdit(commitCurrent: true);
-          if (activeId != null) {
-            controller.selectNode(activeId);
-          } else {
-            controller.toNormal();
-          }
-        }
-        break;
-      case PageMode.selected:
-        controller.toNormal();
+        await _finishActiveEditing(discardIfEmpty: true);
         break;
       case PageMode.dragging:
         controller.toNormal();
@@ -618,10 +704,7 @@ class _NodePageState extends ConsumerState<NodePage>
             isRoot ? 'DeepList' : parent?.content ?? '',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w500,
-            ),
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
           ),
         ),
         body: nodesAsync.when(
@@ -667,10 +750,9 @@ class _NodePageState extends ConsumerState<NodePage>
                   child: NodeList(
                     items: displayItems,
                     parentId: widget.parentId,
-                    selectedNodeId: pageState.selectedNodeId,
                     editingNodeId: pageState.editingNodeId,
                     editorSession: _editorSession,
-                    onSelect: (id) => unawaited(_selectNode(id)),
+                    onLongPress: (node) => unawaited(_openActionMenu(node)),
                     onStartEditing: _startEditing,
                     onCommit: _commit,
                     onChanged: (node, text) => _scheduleAutosave(node.id, text),
@@ -709,13 +791,14 @@ class _NodePageState extends ConsumerState<NodePage>
                     onBlankAreaTap: () => unawaited(_createTrailingNode()),
                   ),
                 ),
-                // Spec 29: Keyboard Toolbar above keyboard during Editing
+                // Keyboard Toolbar above keyboard during Editing
                 if (pageState.mode == PageMode.editing && activeItem != null)
                   KeyboardToolbar(
                     canOutdent: activeItem.canOutdent,
                     canIndent: activeItem.canIndent,
                     onOutdent: () => unawaited(_handleOutdent(activeItem.id)),
                     onIndent: () => unawaited(_handleIndent(activeItem.id)),
+                    onMore: () => unawaited(_openActionMenu(activeItem.node)),
                     onDone: () async {
                       await _finishActiveEditing(discardIfEmpty: true);
                     },
@@ -727,51 +810,6 @@ class _NodePageState extends ConsumerState<NodePage>
           error: (error, stackTrace) =>
               Center(child: Text('Unable to load nodes: $error')),
         ),
-        // Spec 33 & Issue 1: Selected Bottom Toolbar (hidden when dragging)
-        floatingActionButton:
-            pageState.mode == PageMode.selected &&
-                !pageState.isDragging &&
-                pageState.selectedNodeId != null
-            ? SelectionToolbar(
-                onDelete: () =>
-                    unawaited(_deleteSelectedNode(pageState.selectedNodeId!)),
-                onMore: () {
-                  showModalBottomSheet<void>(
-                    context: context,
-                    builder: (sheetContext) => SafeArea(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ListTile(
-                            leading: const Icon(Icons.archive_outlined),
-                            title: const Text('归档节点'),
-                            onTap: () async {
-                              Navigator.pop(sheetContext);
-                              final id = pageState.selectedNodeId;
-                              if (id != null) {
-                                await ref
-                                    .read(treeCommandServiceProvider)
-                                    .archiveNode(id);
-                                if (mounted) {
-                                  ref
-                                      .read(
-                                        nodePageControllerProvider(
-                                          widget.parentId,
-                                        ).notifier,
-                                      )
-                                      .toNormal();
-                                }
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              )
-            : null,
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       ),
     );
   }
