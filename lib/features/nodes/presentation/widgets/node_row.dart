@@ -338,12 +338,6 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
                       widget.item.node.color.resolve(theme.brightness) ??
                       Colors.transparent,
                   borderRadius: BorderRadius.circular(11),
-                  border: Border.all(
-                    color: widget.isEditing
-                        ? theme.colorScheme.primary.withValues(alpha: 0.35)
-                        : Colors.transparent,
-                    width: 1.0,
-                  ),
                 ),
                 child: Stack(
                   alignment: Alignment.centerLeft,

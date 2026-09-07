@@ -57,6 +57,9 @@ void main() {
       expect(controller.mode, PageMode.editing);
       expect(controller.editingNodeId, a.id);
       expect(find.byType(TextField), findsOneWidget);
+
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.focusNode!.hasFocus, isTrue);
     },
   );
 

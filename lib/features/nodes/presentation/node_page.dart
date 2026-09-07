@@ -39,6 +39,7 @@ class _NodePageState extends ConsumerState<NodePage>
   String? _pendingAutosaveText;
   Future<bool>? _autosaveInFlight;
   double _lastBottomInset = 0.0;
+  int? _keyboardSessionGeneration;
   bool _routeSubscribed = false;
   bool _isHandlingEnter = false;
   Timer? _enterProtectionTimer;
@@ -59,6 +60,9 @@ class _NodePageState extends ConsumerState<NodePage>
         WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
     if (view != null) {
       _lastBottomInset = view.viewInsets.bottom / view.devicePixelRatio;
+      if (_lastBottomInset > 0) {
+        _keyboardSessionGeneration = _editorSession.focusGeneration;
+      }
     }
     if (_routeSubscribed) return;
     final route = ModalRoute.of(context);
@@ -105,16 +109,40 @@ class _NodePageState extends ConsumerState<NodePage>
     final keyboardWasVisible = _lastBottomInset > 0;
     final keyboardIsVisible = bottomInset > 0;
 
+    if (keyboardIsVisible) {
+      _keyboardSessionGeneration = _editorSession.focusGeneration;
+    }
+
+    if (_editorSession.hasPendingFocus) {
+      _lastBottomInset = bottomInset;
+      return;
+    }
+
     if (keyboardWasVisible && !keyboardIsVisible) {
+      if (_editorSession.isHandingOver) {
+        _lastBottomInset = bottomInset;
+        return;
+      }
       if (_isHandlingEnter) {
         _lastBottomInset = bottomInset;
         return;
       }
       if (mounted) {
-        final currentMode = ref
-            .read(nodePageControllerProvider(widget.parentId))
-            .mode;
-        if (currentMode == PageMode.editing) {
+        final pageState = ref.read(nodePageControllerProvider(widget.parentId));
+        final editingId = pageState.editingNodeId;
+        final isSameGeneration =
+            _keyboardSessionGeneration == null ||
+            _keyboardSessionGeneration == _editorSession.focusGeneration;
+
+        final shouldFinish =
+            !_isHandlingEnter &&
+            !_editorSession.isHandingOver &&
+            !_editorSession.hasPendingFocus &&
+            editingId != null &&
+            !_editorSession.isFocused(editingId) &&
+            isSameGeneration;
+
+        if (shouldFinish && pageState.mode == PageMode.editing) {
           unawaited(_finishActiveEditing(discardIfEmpty: true));
         }
       }
@@ -139,7 +167,7 @@ class _NodePageState extends ConsumerState<NodePage>
   // Safe empty node cleanup: only delete when activeText is confirmed non-null and trim().isEmpty.
   // Never delete when activeText == null (state unready, blur race, or controller unavailable).
   Future<bool> _finishActiveEditing({bool discardIfEmpty = true}) async {
-    if (_isHandlingEnter) return false;
+    if (_isHandlingEnter || _editorSession.isHandingOver) return false;
     _autosaveTimer?.cancel();
     _autosaveTimer = null;
     _pendingAutosaveNodeId = null;
@@ -223,9 +251,7 @@ class _NodePageState extends ConsumerState<NodePage>
     ref
         .read(nodePageControllerProvider(widget.parentId).notifier)
         .startEditing(node.id);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _editorSession.focus(node.id, cursor: node.content.length);
-    });
+    _editorSession.focus(node.id, cursor: node.content.length);
   }
 
   Future<void> _deleteEmptyNode(NodeId nodeId) async {
@@ -397,7 +423,7 @@ class _NodePageState extends ConsumerState<NodePage>
       ref
           .read(nodePageControllerProvider(widget.parentId).notifier)
           .startEditing(newNode.id);
-      _editorSession.focus(newNode.id, cursor: 0);
+      _editorSession.handoverFocus(node.id, newNode.id, cursor: 0);
 
       handoverScheduled = true;
       _enterProtectionTimer = Timer(const Duration(milliseconds: 300), () {
@@ -435,7 +461,8 @@ class _NodePageState extends ConsumerState<NodePage>
         ref
             .read(nodePageControllerProvider(widget.parentId).notifier)
             .startEditing(previousItem.id);
-        _editorSession.focus(
+        _editorSession.handoverFocus(
+          node.id,
           previousItem.id,
           cursor: previousItem.node.content.length,
         );
@@ -775,7 +802,7 @@ class _NodePageState extends ConsumerState<NodePage>
                     onCommit: _commit,
                     onChanged: (node, text) => _scheduleAutosave(node.id, text),
                     onBlur: (text) {
-                      if (_isHandlingEnter) return;
+                      if (_isHandlingEnter || _editorSession.isHandingOver) return;
                       if (text.trim().isEmpty) {
                         unawaited(_finishActiveEditing(discardIfEmpty: true));
                       }
