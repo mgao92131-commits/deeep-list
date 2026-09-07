@@ -203,6 +203,29 @@ class _SmartNodePageState extends ConsumerState<SmartNodePage>
       await _coordinator.runMutation(
         () => ref.read(treeCommandServiceProvider).toggleDone(node.id),
       );
+      if (!mounted || !leaves) return;
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('已完成'),
+          action: SnackBarAction(
+            label: '撤销',
+            onPressed: () => unawaited(_undoDone(node.id)),
+          ),
+        ),
+      );
+    } catch (e) {
+      _showMutationError(e);
+    }
+  }
+
+  Future<void> _undoDone(NodeId nodeId) async {
+    if (!mounted) return;
+    try {
+      await _coordinator.runMutation(
+        () => ref.read(treeCommandServiceProvider).toggleDone(nodeId),
+      );
     } catch (e) {
       _showMutationError(e);
     }

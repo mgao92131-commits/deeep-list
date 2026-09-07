@@ -39,6 +39,34 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
+    for (final entry in ['today', 'favorites', 'due-dates']) {
+      testWidgets('$entry 完成提示并撤销通过 Drift 自动恢复节点', (tester) async {
+        final node = await harness.commands.createNode(
+          parentId: null,
+          content: 'Undo Task',
+        );
+        await harness.commands.updateDueDate(node.id, DateTime.now());
+        await harness.commands.toggleFavorite(node.id);
+        await pumpApp(tester);
+        await tester.tap(find.byKey(ValueKey('smart-entry-$entry')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Undo Task'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('完成'));
+        await tester.pumpAndSettle();
+        expect(find.text('Undo Task'), findsNothing);
+        expect((await harness.repository.getNode(node.id))!.isDone, isTrue);
+        expect(find.text('已完成'), findsOneWidget);
+        expect(find.byType(AlertDialog), findsNothing);
+        await tester.tap(find.text('撤销'));
+        await tester.pumpAndSettle();
+        expect((await harness.repository.getNode(node.id))!.isDone, isFalse);
+        expect(find.text('Undo Task'), findsOneWidget);
+        expect(find.byType(KeyboardToolbar), findsNothing);
+        await tearDownApp(tester);
+      });
+    }
+
     testWidgets('普通列表 NodeRow 在真实 Drift 下截止日期的显示、修改和移除', (tester) async {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
