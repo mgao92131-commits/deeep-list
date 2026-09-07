@@ -389,12 +389,8 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
           child: Container(
             alignment: Alignment.centerRight,
             padding: const EdgeInsets.only(right: 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                if (widget.item.childCount > 0) ...[
-                  Text(
+            child: widget.item.childCount > 0
+                ? Text(
                     '${widget.item.childCount}',
                     style: TextStyle(
                       fontSize: 13,
@@ -402,18 +398,14 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
                         alpha: 0.6,
                       ),
                     ),
+                  )
+                : Icon(
+                    Icons.chevron_right,
+                    size: 20,
+                    color: theme.colorScheme.onSurfaceVariant.withValues(
+                      alpha: 0.45,
+                    ),
                   ),
-                  const SizedBox(width: 2),
-                ],
-                Icon(
-                  Icons.chevron_right,
-                  size: 20,
-                  color: theme.colorScheme.onSurfaceVariant.withValues(
-                    alpha: 0.45,
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ),
