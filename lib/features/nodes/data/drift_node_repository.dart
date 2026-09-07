@@ -113,6 +113,7 @@ class DriftNodeRepository implements TreeMutationRepository {
       isDone: row.isDone,
       isFavorite: row.isFavorite,
       isArchived: row.isArchived,
+      color: row.color,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     );
@@ -182,6 +183,7 @@ class _DriftNodeRepositoryTransaction implements TreeTransaction {
       isDone: row.isDone,
       isFavorite: row.isFavorite,
       isArchived: row.isArchived,
+      color: row.color,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     );
@@ -197,6 +199,7 @@ class _DriftNodeRepositoryTransaction implements TreeTransaction {
       isDone: Value(node.isDone),
       isFavorite: Value(node.isFavorite),
       isArchived: Value(node.isArchived),
+      color: Value(node.color),
       createdAt: node.createdAt,
       updatedAt: node.updatedAt,
     );

@@ -117,9 +117,7 @@ void main() {
       await commands.createNode(parentId: null, content: 'HelloWorld');
       await pumpApp(tester);
 
-      // Double tap to edit
-      await tester.tap(find.text('HelloWorld'));
-      await tester.pumpAndSettle();
+      // Tap once to edit
       await tester.tap(find.text('HelloWorld'));
       await tester.pumpAndSettle();
 
@@ -144,9 +142,7 @@ void main() {
       await commands.createNode(parentId: null, content: 'HelloWorld');
       await pumpApp(tester);
 
-      // Double tap to edit
-      await tester.tap(find.text('HelloWorld'));
-      await tester.pumpAndSettle();
+      // Tap once to edit
       await tester.tap(find.text('HelloWorld'));
       await tester.pumpAndSettle();
 
@@ -171,9 +167,7 @@ void main() {
       await commands.createNode(parentId: null, content: 'HelloWorld');
       await pumpApp(tester);
 
-      // Double tap to edit
-      await tester.tap(find.text('HelloWorld'));
-      await tester.pumpAndSettle();
+      // Tap once to edit
       await tester.tap(find.text('HelloWorld'));
       await tester.pumpAndSettle();
 
@@ -477,7 +471,7 @@ void main() {
   );
 
   testWidgets(
-    'NodeRow trailing slot displays childCount when > 0, chevron when == 0, across Normal, Selected, and Dragging; navigates directly',
+    'NodeRow trailing slot displays childCount when > 0 and chevron permanently across Normal, Editing, and Dragging; navigates directly',
     (tester) async {
       final parentA = await commands.createNode(
         parentId: null,
@@ -550,7 +544,7 @@ void main() {
   );
 
   testWidgets(
-    'NodeRow text right padding is permanently 48dp across Normal, Selected, and Editing states',
+    'NodeRow text right padding is permanently 48dp across Normal, Editing, and Dragging states',
     (tester) async {
       await commands.createNode(parentId: null, content: 'Stable Width Node');
       await pumpApp(tester);

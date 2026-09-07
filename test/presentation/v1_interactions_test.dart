@@ -87,10 +87,13 @@ void main() {
       await tester.tap(find.text('B'));
       await tester.pumpAndSettle();
 
-      // B is now editing
+      // B is now editing and has actual focus
       final pageState = container.read(nodePageControllerProvider(null));
       expect(pageState.mode, PageMode.editing);
       expect(pageState.editingNodeId, b.id);
+
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.focusNode!.hasFocus, isTrue);
 
       // A is saved in repository
       final nodeA = await repository.getNode(a.id);
@@ -123,6 +126,9 @@ void main() {
     ).read(nodePageControllerProvider(null));
     expect(controller.mode, PageMode.editing);
     expect(controller.editingNodeId, remaining.first.id);
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.focusNode!.hasFocus, isTrue);
   });
 
   // D. 点击空白无缝创建
@@ -154,6 +160,9 @@ void main() {
       ).read(nodePageControllerProvider(null));
       expect(controller.mode, PageMode.editing);
       expect(controller.editingNodeId, children[1].id);
+
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.focusNode!.hasFocus, isTrue);
     },
   );
 
@@ -415,4 +424,83 @@ void main() {
     final updated = await repository.getNode(second.id);
     expect(updated!.parentId, first.id);
   });
+
+  // Case 1: Copy A -> Delete A -> Paste under B -> fails gracefully, clipboard cleared, snackbar
+  testWidgets(
+    'Case 1: Paste fails gracefully with notification if source was deleted',
+    (tester) async {
+      final a = await commands.createNode(parentId: null, content: 'A');
+      final b = await commands.createNode(parentId: null, content: 'B');
+      await pumpApp(tester);
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DeepListApp)),
+      );
+
+      // Copy A
+      await tester.longPress(find.text('A'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('复制'));
+      await tester.pumpAndSettle();
+      expect(container.read(clipboardControllerProvider), a.id);
+
+      // Delete A from database
+      await commands.deleteSubtree(a.id);
+      await tester.pumpAndSettle();
+      expect(find.text('A'), findsNothing);
+
+      // Long press B -> Paste
+      await tester.longPress(find.text('B'));
+      await tester.pumpAndSettle();
+      expect(find.text('粘贴'), findsOneWidget);
+      await tester.tap(find.text('粘贴'));
+      await tester.pumpAndSettle();
+
+      // Clipboard is cleared
+      expect(container.read(clipboardControllerProvider), isNull);
+      // Snackbar appeared
+      expect(find.text('复制的节点已不存在'), findsOneWidget);
+      // Only B remains, no new node created
+      final siblings = await repository.getChildren(null);
+      expect(siblings, hasLength(1));
+      expect(siblings.single.id, b.id);
+    },
+  );
+
+  // Case 4: Editing state -> type fresh text -> More -> Copy -> Paste copies latest text
+  testWidgets(
+    'Case 4: Copying actively editing node flushes pending changes immediately',
+    (tester) async {
+      await commands.createNode(parentId: null, content: 'Initial Text');
+      await commands.createNode(parentId: null, content: 'TargetNode');
+      await pumpApp(tester);
+
+      // Tap Initial Text to edit
+      await tester.tap(find.text('Initial Text'));
+      await tester.pumpAndSettle();
+
+      // Type new text without waiting for 400ms autosave
+      await tester.enterText(find.byType(TextField), 'Freshly Typed');
+      await tester.pump();
+
+      // Click more button on KeyboardToolbar to copy
+      expect(find.byTooltip('更多'), findsOneWidget);
+      await tester.tap(find.byTooltip('更多'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('复制'));
+      await tester.pumpAndSettle();
+
+      // Paste under TargetNode
+      await tester.longPress(find.text('TargetNode'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('粘贴'));
+      await tester.pumpAndSettle();
+
+      // The pasted node must contain the freshly typed content, not the initial text
+      final siblings = await repository.getChildren(null);
+      final pasted = siblings.last;
+      expect(pasted.content, 'Freshly Typed');
+    },
+  );
 }

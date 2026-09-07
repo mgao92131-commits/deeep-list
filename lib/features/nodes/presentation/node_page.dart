@@ -574,6 +574,18 @@ class _NodePageState extends ConsumerState<NodePage>
     context.push('/node/${node.id}');
   }
 
+  Future<void> _copyNode(Node node) async {
+    final currentEditingId = ref
+        .read(nodePageControllerProvider(widget.parentId))
+        .editingNodeId;
+
+    if (currentEditingId == node.id) {
+      await _flushPendingEdit(commitCurrent: true, unfocus: false);
+    }
+
+    ref.read(clipboardControllerProvider.notifier).copy(node.id);
+  }
+
   Future<void> _openActionMenu(Node node) async {
     final clipboardNodeId = ref.read(clipboardControllerProvider);
     final canPaste = clipboardNodeId != null;
@@ -582,13 +594,11 @@ class _NodePageState extends ConsumerState<NodePage>
       context,
       node: node,
       canPaste: canPaste,
-      onCopy: () {
-        ref.read(clipboardControllerProvider.notifier).copy(node.id);
-      },
+      onCopy: () => unawaited(_copyNode(node)),
       onPaste: canPaste
           ? () async {
               try {
-                await _runMutation(
+                await _mutationQueue.add(
                   () => ref
                       .read(treeCommandServiceProvider)
                       .copySubtree(
@@ -597,16 +607,24 @@ class _NodePageState extends ConsumerState<NodePage>
                         targetPosition: node.position + 1,
                       ),
                 );
-              } catch (error) {
+              } on StateError {
                 ref.read(clipboardControllerProvider.notifier).clear();
                 if (mounted) {
                   ScaffoldMessenger.of(
                     context,
                   ).showSnackBar(const SnackBar(content: Text('复制的节点已不存在')));
                 }
+              } catch (error) {
+                _showMutationError(error);
               }
             }
           : null,
+      onColorSelected: (color) async {
+        await _runMutation(
+          () =>
+              ref.read(treeCommandServiceProvider).updateColor(node.id, color),
+        );
+      },
       onArchive: () async {
         final currentEditingId = ref
             .read(nodePageControllerProvider(widget.parentId))
@@ -794,10 +812,21 @@ class _NodePageState extends ConsumerState<NodePage>
                 // Keyboard Toolbar above keyboard during Editing
                 if (pageState.mode == PageMode.editing && activeItem != null)
                   KeyboardToolbar(
+                    activeNodeId: activeItem.id,
+                    currentColor: activeItem.node.color,
                     canOutdent: activeItem.canOutdent,
                     canIndent: activeItem.canIndent,
                     onOutdent: () => unawaited(_handleOutdent(activeItem.id)),
                     onIndent: () => unawaited(_handleIndent(activeItem.id)),
+                    onColorSelected: (color) {
+                      unawaited(
+                        _runMutation(
+                          () => ref
+                              .read(treeCommandServiceProvider)
+                              .updateColor(activeItem.id, color),
+                        ),
+                      );
+                    },
                     onMore: () => unawaited(_openActionMenu(activeItem.node)),
                     onDone: () async {
                       await _finishActiveEditing(discardIfEmpty: true);

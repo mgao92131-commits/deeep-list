@@ -1,5 +1,7 @@
 import 'package:drift/drift.dart';
 
+import '../../../features/nodes/domain/node_color.dart';
+
 @TableIndex(name: 'nodes_parent_position', columns: {#parentId, #position})
 @TableIndex(
   name: 'nodes_parent_archive_position',
@@ -21,6 +23,9 @@ class Nodes extends Table {
   BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();
 
   BoolColumn get isArchived => boolean().withDefault(const Constant(false))();
+
+  TextColumn get color =>
+      textEnum<NodeColor>().withDefault(const Constant('none'))();
 
   DateTimeColumn get createdAt => dateTime()();
 

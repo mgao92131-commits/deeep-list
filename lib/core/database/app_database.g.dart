@@ -105,6 +105,16 @@ class $NodesTable extends Nodes with TableInfo<$NodesTable, Node> {
     ),
     defaultValue: const Constant(false),
   );
+  @override
+  late final GeneratedColumnWithTypeConverter<NodeColor, String> color =
+      GeneratedColumn<String>(
+        'color',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('none'),
+      ).withConverter<NodeColor>($NodesTable.$convertercolor);
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -137,6 +147,7 @@ class $NodesTable extends Nodes with TableInfo<$NodesTable, Node> {
     isDone,
     isFavorite,
     isArchived,
+    color,
     createdAt,
     updatedAt,
   ];
@@ -260,6 +271,12 @@ class $NodesTable extends Nodes with TableInfo<$NodesTable, Node> {
         DriftSqlType.bool,
         data['${effectivePrefix}is_archived'],
       )!,
+      color: $NodesTable.$convertercolor.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}color'],
+        )!,
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -275,6 +292,9 @@ class $NodesTable extends Nodes with TableInfo<$NodesTable, Node> {
   $NodesTable createAlias(String alias) {
     return $NodesTable(attachedDatabase, alias);
   }
+
+  static JsonTypeConverter2<NodeColor, String, String> $convertercolor =
+      const EnumNameConverter<NodeColor>(NodeColor.values);
 }
 
 class Node extends DataClass implements Insertable<Node> {
@@ -286,6 +306,7 @@ class Node extends DataClass implements Insertable<Node> {
   final bool isDone;
   final bool isFavorite;
   final bool isArchived;
+  final NodeColor color;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Node({
@@ -297,6 +318,7 @@ class Node extends DataClass implements Insertable<Node> {
     required this.isDone,
     required this.isFavorite,
     required this.isArchived,
+    required this.color,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -315,6 +337,9 @@ class Node extends DataClass implements Insertable<Node> {
     map['is_done'] = Variable<bool>(isDone);
     map['is_favorite'] = Variable<bool>(isFavorite);
     map['is_archived'] = Variable<bool>(isArchived);
+    {
+      map['color'] = Variable<String>($NodesTable.$convertercolor.toSql(color));
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -332,6 +357,7 @@ class Node extends DataClass implements Insertable<Node> {
       isDone: Value(isDone),
       isFavorite: Value(isFavorite),
       isArchived: Value(isArchived),
+      color: Value(color),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -351,6 +377,9 @@ class Node extends DataClass implements Insertable<Node> {
       isDone: serializer.fromJson<bool>(json['isDone']),
       isFavorite: serializer.fromJson<bool>(json['isFavorite']),
       isArchived: serializer.fromJson<bool>(json['isArchived']),
+      color: $NodesTable.$convertercolor.fromJson(
+        serializer.fromJson<String>(json['color']),
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -367,6 +396,9 @@ class Node extends DataClass implements Insertable<Node> {
       'isDone': serializer.toJson<bool>(isDone),
       'isFavorite': serializer.toJson<bool>(isFavorite),
       'isArchived': serializer.toJson<bool>(isArchived),
+      'color': serializer.toJson<String>(
+        $NodesTable.$convertercolor.toJson(color),
+      ),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -381,6 +413,7 @@ class Node extends DataClass implements Insertable<Node> {
     bool? isDone,
     bool? isFavorite,
     bool? isArchived,
+    NodeColor? color,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Node(
@@ -392,6 +425,7 @@ class Node extends DataClass implements Insertable<Node> {
     isDone: isDone ?? this.isDone,
     isFavorite: isFavorite ?? this.isFavorite,
     isArchived: isArchived ?? this.isArchived,
+    color: color ?? this.color,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -409,6 +443,7 @@ class Node extends DataClass implements Insertable<Node> {
       isArchived: data.isArchived.present
           ? data.isArchived.value
           : this.isArchived,
+      color: data.color.present ? data.color.value : this.color,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -425,6 +460,7 @@ class Node extends DataClass implements Insertable<Node> {
           ..write('isDone: $isDone, ')
           ..write('isFavorite: $isFavorite, ')
           ..write('isArchived: $isArchived, ')
+          ..write('color: $color, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -441,6 +477,7 @@ class Node extends DataClass implements Insertable<Node> {
     isDone,
     isFavorite,
     isArchived,
+    color,
     createdAt,
     updatedAt,
   );
@@ -456,6 +493,7 @@ class Node extends DataClass implements Insertable<Node> {
           other.isDone == this.isDone &&
           other.isFavorite == this.isFavorite &&
           other.isArchived == this.isArchived &&
+          other.color == this.color &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -469,6 +507,7 @@ class NodesCompanion extends UpdateCompanion<Node> {
   final Value<bool> isDone;
   final Value<bool> isFavorite;
   final Value<bool> isArchived;
+  final Value<NodeColor> color;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -481,6 +520,7 @@ class NodesCompanion extends UpdateCompanion<Node> {
     this.isDone = const Value.absent(),
     this.isFavorite = const Value.absent(),
     this.isArchived = const Value.absent(),
+    this.color = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -494,6 +534,7 @@ class NodesCompanion extends UpdateCompanion<Node> {
     this.isDone = const Value.absent(),
     this.isFavorite = const Value.absent(),
     this.isArchived = const Value.absent(),
+    this.color = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -511,6 +552,7 @@ class NodesCompanion extends UpdateCompanion<Node> {
     Expression<bool>? isDone,
     Expression<bool>? isFavorite,
     Expression<bool>? isArchived,
+    Expression<String>? color,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -524,6 +566,7 @@ class NodesCompanion extends UpdateCompanion<Node> {
       if (isDone != null) 'is_done': isDone,
       if (isFavorite != null) 'is_favorite': isFavorite,
       if (isArchived != null) 'is_archived': isArchived,
+      if (color != null) 'color': color,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -539,6 +582,7 @@ class NodesCompanion extends UpdateCompanion<Node> {
     Value<bool>? isDone,
     Value<bool>? isFavorite,
     Value<bool>? isArchived,
+    Value<NodeColor>? color,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -552,6 +596,7 @@ class NodesCompanion extends UpdateCompanion<Node> {
       isDone: isDone ?? this.isDone,
       isFavorite: isFavorite ?? this.isFavorite,
       isArchived: isArchived ?? this.isArchived,
+      color: color ?? this.color,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -585,6 +630,11 @@ class NodesCompanion extends UpdateCompanion<Node> {
     if (isArchived.present) {
       map['is_archived'] = Variable<bool>(isArchived.value);
     }
+    if (color.present) {
+      map['color'] = Variable<String>(
+        $NodesTable.$convertercolor.toSql(color.value),
+      );
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -608,6 +658,7 @@ class NodesCompanion extends UpdateCompanion<Node> {
           ..write('isDone: $isDone, ')
           ..write('isFavorite: $isFavorite, ')
           ..write('isArchived: $isArchived, ')
+          ..write('color: $color, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -649,6 +700,7 @@ typedef $$NodesTableCreateCompanionBuilder =
       Value<bool> isDone,
       Value<bool> isFavorite,
       Value<bool> isArchived,
+      Value<NodeColor> color,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -663,6 +715,7 @@ typedef $$NodesTableUpdateCompanionBuilder =
       Value<bool> isDone,
       Value<bool> isFavorite,
       Value<bool> isArchived,
+      Value<NodeColor> color,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -733,6 +786,12 @@ class $$NodesTableFilterComposer extends Composer<_$AppDatabase, $NodesTable> {
     column: $table.isArchived,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnWithTypeConverterFilters<NodeColor, NodeColor, String> get color =>
+      $composableBuilder(
+        column: $table.color,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
@@ -812,6 +871,11 @@ class $$NodesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get color => $composableBuilder(
+    column: $table.color,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -880,6 +944,9 @@ class $$NodesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumnWithTypeConverter<NodeColor, String> get color =>
+      $composableBuilder(column: $table.color, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -946,6 +1013,7 @@ class $$NodesTableTableManager
                 Value<bool> isDone = const Value.absent(),
                 Value<bool> isFavorite = const Value.absent(),
                 Value<bool> isArchived = const Value.absent(),
+                Value<NodeColor> color = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -958,6 +1026,7 @@ class $$NodesTableTableManager
                 isDone: isDone,
                 isFavorite: isFavorite,
                 isArchived: isArchived,
+                color: color,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -972,6 +1041,7 @@ class $$NodesTableTableManager
                 Value<bool> isDone = const Value.absent(),
                 Value<bool> isFavorite = const Value.absent(),
                 Value<bool> isArchived = const Value.absent(),
+                Value<NodeColor> color = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -984,6 +1054,7 @@ class $$NodesTableTableManager
                 isDone: isDone,
                 isFavorite: isFavorite,
                 isArchived: isArchived,
+                color: color,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,

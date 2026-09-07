@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
+import '../../features/nodes/domain/node_color.dart';
 import 'tables/nodes_table.dart';
 
 part 'app_database.g.dart';
@@ -11,7 +12,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'deep_list'));
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -22,6 +23,9 @@ class AppDatabase extends _$AppDatabase {
     onUpgrade: (Migrator migrator, int from, int to) async {
       if (from < 2) {
         await _createTreeIntegrityTriggers();
+      }
+      if (from < 3) {
+        await migrator.addColumn(nodes, nodes.color);
       }
     },
     beforeOpen: (details) async {

@@ -370,4 +370,61 @@ void main() {
       );
     },
   );
+
+  test(
+    'Case 5: copySubtree on malformed cyclic tree fails fast and rolls back without infinite loop',
+    () async {
+      final repository = MemoryNodeRepository();
+      addTearDown(repository.close);
+      final commands = TreeCommandService(repository);
+      final now = DateTime.utc(2026, 1, 1);
+      final a = Node(
+        id: 'a',
+        parentId: 'b',
+        position: 0,
+        content: 'A',
+        note: null,
+        isDone: false,
+        isFavorite: false,
+        isArchived: false,
+        createdAt: now,
+        updatedAt: now,
+      );
+      final b = Node(
+        id: 'b',
+        parentId: 'a',
+        position: 0,
+        content: 'B',
+        note: null,
+        isDone: false,
+        isFavorite: false,
+        isArchived: false,
+        createdAt: now,
+        updatedAt: now,
+      );
+      await repository.transaction((tx) async {
+        await tx.saveNode(a);
+        await tx.saveNode(b);
+      });
+
+      await expectLater(
+        commands.copySubtree(
+          sourceNodeId: a.id,
+          targetParentId: null,
+          targetPosition: 0,
+        ),
+        throwsA(
+          isA<TreeRuleViolation>().having(
+            (e) => e.code,
+            'code',
+            TreeRuleCode.cycle,
+          ),
+        ),
+      ).timeout(const Duration(seconds: 2));
+
+      // Verify transaction rolled back: no partial copy nodes created
+      final allNodes = await repository.getChildren(null);
+      expect(allNodes, isEmpty);
+    },
+  );
 }

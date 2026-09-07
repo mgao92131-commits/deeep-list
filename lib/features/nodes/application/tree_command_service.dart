@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 
 import '../domain/node.dart';
+import '../domain/node_color.dart';
 import '../domain/node_id.dart';
 import '../domain/node_repository.dart';
 import '../domain/results/merge_result.dart';
@@ -41,6 +42,7 @@ class TreeCommandService {
         isDone: false,
         isFavorite: false,
         isArchived: false,
+        color: NodeColor.none,
         createdAt: now,
         updatedAt: now,
       );
@@ -85,8 +87,15 @@ class TreeCommandService {
       // BFS traverse to gather all descendants in order
       final nodesToCopy = <Node>[sourceRoot];
       final queue = <NodeId>[sourceNodeId];
+      final visited = <NodeId>{};
       while (queue.isNotEmpty) {
         final currentId = queue.removeAt(0);
+        if (!visited.add(currentId)) {
+          throw const TreeRuleViolation(
+            TreeRuleCode.cycle,
+            'The subtree contains a cycle.',
+          );
+        }
         final children = await transaction.getChildren(
           currentId,
           includeArchived: true,
@@ -112,6 +121,7 @@ class TreeCommandService {
         isDone: sourceRoot.isDone,
         isFavorite: sourceRoot.isFavorite,
         isArchived: false,
+        color: sourceRoot.color,
         createdAt: now,
         updatedAt: now,
       );
@@ -131,6 +141,7 @@ class TreeCommandService {
           isDone: oldNode.isDone,
           isFavorite: oldNode.isFavorite,
           isArchived: oldNode.isArchived,
+          color: oldNode.color,
           createdAt: now,
           updatedAt: now,
         );
@@ -197,6 +208,15 @@ class TreeCommandService {
       final node = await _requireNode(transaction, nodeId);
       await transaction.saveNode(
         node.copyWith(content: content, updatedAt: _clock()),
+      );
+    });
+  }
+
+  Future<void> updateColor(NodeId nodeId, NodeColor color) {
+    return _repository.transaction((transaction) async {
+      final node = await _requireNode(transaction, nodeId);
+      await transaction.saveNode(
+        node.copyWith(color: color, updatedAt: _clock()),
       );
     });
   }

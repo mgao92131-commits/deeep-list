@@ -306,7 +306,7 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
     }
 
     // Trailing slot is always 48dp wide. Right padding is permanently fixed to 48.0
-    // so text width never jumps or wraps differently across Normal, Selected, Editing, and Dragging.
+    // so text width never jumps or wraps differently across Normal, Editing, and Dragging.
     const rightPadding = 48.0;
 
     const dividerIndent = 20.0;
@@ -343,8 +343,16 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
                 ),
                 constraints: const BoxConstraints(minHeight: minHeight),
                 decoration: BoxDecoration(
-                  color: Colors.transparent,
+                  color:
+                      widget.item.node.color.resolve(theme.brightness) ??
+                      Colors.transparent,
                   borderRadius: BorderRadius.circular(11),
+                  border: Border.all(
+                    color: widget.isEditing
+                        ? theme.colorScheme.primary.withValues(alpha: 0.35)
+                        : Colors.transparent,
+                    width: 1.0,
+                  ),
                 ),
                 child: Stack(
                   alignment: Alignment.centerLeft,

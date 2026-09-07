@@ -83,8 +83,8 @@ class NodeList extends StatelessWidget {
             },
             proxyDecorator: (child, index, animation) {
               return Material(
-                elevation: 1,
-                color: theme.colorScheme.surface,
+                elevation: 2,
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(11),
                 child: child,
               );

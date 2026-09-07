@@ -1,3 +1,4 @@
+import 'node_color.dart';
 import 'node_id.dart';
 
 const _unset = Object();
@@ -11,6 +12,7 @@ class Node {
   final bool isDone;
   final bool isFavorite;
   final bool isArchived;
+  final NodeColor color;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -23,6 +25,7 @@ class Node {
     required this.isDone,
     required this.isFavorite,
     required this.isArchived,
+    this.color = NodeColor.none,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -35,6 +38,7 @@ class Node {
     bool? isDone,
     bool? isFavorite,
     bool? isArchived,
+    NodeColor? color,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -49,6 +53,7 @@ class Node {
       isDone: isDone ?? this.isDone,
       isFavorite: isFavorite ?? this.isFavorite,
       isArchived: isArchived ?? this.isArchived,
+      color: color ?? this.color,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
