@@ -410,40 +410,50 @@ class _SmartNodePageState extends ConsumerState<SmartNodePage>
                                     ),
                                   );
                                 },
-                                child: NodeRow(
-                                  key: ValueKey('smart-${item.id}'),
-                                  item: item,
-                                  isEditing: _editingNodeId == item.id,
-                                  editorSession: _editorSession,
-                                  enableSwipeGestures: false,
-                                  onStartEditing: () =>
-                                      _coordinator.startEditing(item.node),
-                                  onNavigate: () => _openNode(item.node),
-                                  onCommit: (text) =>
-                                      _coordinator.commit(item.id, text),
-                                  onChanged: (text) => _coordinator
-                                      .scheduleAutosave(item.id, text),
-                                  onBlur: (text) {
-                                    if (text.trim().isEmpty) {
-                                      unawaited(
-                                        _coordinator.finishActiveEditing(
+                                child: Consumer(
+                                  builder: (context, ref, _) {
+                                    final pathText = ref
+                                        .watch(nodePathProvider(item.node))
+                                        .value;
+                                    final displayItem = pathText != null
+                                        ? item.copyWith(pathText: pathText)
+                                        : item;
+                                    return NodeRow(
+                                      key: ValueKey('smart-${item.id}'),
+                                      item: displayItem,
+                                      isEditing: _editingNodeId == item.id,
+                                      editorSession: _editorSession,
+                                      enableSwipeGestures: false,
+                                      onStartEditing: () =>
+                                          _coordinator.startEditing(item.node),
+                                      onNavigate: () => _openNode(item.node),
+                                      onCommit: (text) =>
+                                          _coordinator.commit(item.id, text),
+                                      onChanged: (text) => _coordinator
+                                          .scheduleAutosave(item.id, text),
+                                      onBlur: (text) {
+                                        if (text.trim().isEmpty) {
+                                          unawaited(
+                                            _coordinator.finishActiveEditing(
+                                              discardIfEmpty: true,
+                                            ),
+                                          );
+                                        }
+                                      },
+                                      onEnter: (cursor, text) async {
+                                        await _coordinator.finishActiveEditing(
                                           discardIfEmpty: true,
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  onEnter: (cursor, text) async {
-                                    await _coordinator.finishActiveEditing(
-                                      discardIfEmpty: true,
+                                        );
+                                      },
+                                      onBackspaceEmpty: () async {
+                                        await _coordinator.finishActiveEditing(
+                                          discardIfEmpty: true,
+                                        );
+                                      },
+                                      onIndent: () {},
+                                      onOutdent: () {},
                                     );
                                   },
-                                  onBackspaceEmpty: () async {
-                                    await _coordinator.finishActiveEditing(
-                                      discardIfEmpty: true,
-                                    );
-                                  },
-                                  onIndent: () {},
-                                  onOutdent: () {},
                                 ),
                               );
                             }, childCount: group.items.length),

@@ -38,8 +38,9 @@ void main() {
     Future<List<SmartNodeGroup>> readGroups(SmartListType type) async {
       final sub = container.listen(smartNodesProvider(type), (_, _) {});
       try {
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-        return await container.read(smartNodesProvider(type).future);
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        final state = container.read(smartNodesProvider(type));
+        return state.value ?? const [];
       } finally {
         sub.close();
       }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -140,5 +142,95 @@ void main() {
     expect(loaded!.id, node.id);
     expect(loaded.parentId, isNull);
     expect((await harness.repository.getChildren(null)).length, 1);
+  });
+
+  test(
+    'watchChildren reacts to updateDueDate across stream emissions',
+    () async {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      final node = await harness.commands.createNode(
+        parentId: null,
+        content: 'Reactive node',
+      );
+      expect(node.dueDate, isNull);
+
+      final emissions = <List<Node>>[];
+      final subscription = harness.repository
+          .watchChildren(null)
+          .listen(emissions.add);
+      addTearDown(subscription.cancel);
+
+      // Wait for the initial emission
+      while (emissions.isEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(emissions.last.single.dueDate, isNull);
+
+      // Update due date
+      await harness.commands.updateDueDate(node.id, today);
+
+      // Wait for next emission
+      final initialCount = emissions.length;
+      while (emissions.length == initialCount) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+
+      final updatedNode = emissions.last.single;
+      expect(updatedNode.id, node.id);
+      expect(updatedNode.dueDate, isNotNull);
+      expect(updatedNode.dueDate!.year, today.year);
+      expect(updatedNode.dueDate!.month, today.month);
+      expect(updatedNode.dueDate!.day, today.day);
+      expect(updatedNode.dueDate, today);
+    },
+  );
+
+  test('watchDueNodes reacts to updateDueDate (add, update, remove)', () async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final emissions = <List<Node>>[];
+    var completer = Completer<List<Node>>();
+    final subscription = harness.repository.watchDueNodes().listen((list) {
+      emissions.add(list);
+      if (!completer.isCompleted) {
+        completer.complete(list);
+      }
+    });
+    addTearDown(subscription.cancel);
+
+    Future<List<Node>> nextEmission() {
+      completer = Completer<List<Node>>();
+      return completer.future;
+    }
+
+    // 1. Initial emission
+    final first = await completer.future;
+    expect(first, isEmpty);
+
+    // 2. Create node without dueDate -> Drift detects table write, emits empty
+    final nextAfterCreateFuture = nextEmission();
+    final node = await harness.commands.createNode(
+      parentId: null,
+      content: 'Due test',
+    );
+    final afterCreate = await nextAfterCreateFuture;
+    expect(afterCreate, isEmpty);
+
+    // 3. Update dueDate to today -> Drift emits 1 item with dueDate == today
+    final nextAfterDueFuture = nextEmission();
+    await harness.commands.updateDueDate(node.id, today);
+    final afterDue = await nextAfterDueFuture;
+    expect(afterDue.length, 1);
+    expect(afterDue.first.id, node.id);
+    expect(afterDue.first.dueDate, today);
+
+    // 4. Update dueDate to null -> Drift emits empty
+    final nextAfterRemoveFuture = nextEmission();
+    await harness.commands.updateDueDate(node.id, null);
+    final afterRemove = await nextAfterRemoveFuture;
+    expect(afterRemove, isEmpty);
   });
 }

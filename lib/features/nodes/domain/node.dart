@@ -34,7 +34,8 @@ class Node {
 
   static DateTime? normalizeDate(DateTime? dt) {
     if (dt == null) return null;
-    return DateTime(dt.year, dt.month, dt.day);
+    final local = dt.toLocal();
+    return DateTime(local.year, local.month, local.day);
   }
 
   Node copyWith({

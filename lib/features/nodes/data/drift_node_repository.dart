@@ -170,7 +170,9 @@ class DriftNodeRepository implements TreeMutationRepository {
       isFavorite: row.isFavorite,
       isArchived: row.isArchived,
       color: row.color,
-      dueDate: row.dueDate,
+      dueDate: row.dueDate == null
+          ? null
+          : domain.Node.normalizeDate(row.dueDate!.toLocal()),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     );
@@ -241,7 +243,9 @@ class _DriftNodeRepositoryTransaction implements TreeTransaction {
       isFavorite: row.isFavorite,
       isArchived: row.isArchived,
       color: row.color,
-      dueDate: row.dueDate,
+      dueDate: row.dueDate == null
+          ? null
+          : domain.Node.normalizeDate(row.dueDate!.toLocal()),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     );
