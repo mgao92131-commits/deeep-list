@@ -336,6 +336,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // 打开菜单选择“选择日期…”
+      addTearDown(tester.view.resetViewInsets);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('截止日期'));
       await tester.pumpAndSettle();
 
@@ -346,6 +349,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // DatePicker 弹出，点击 Cancel 取消
+      tester.view.viewInsets = FakeViewPadding.zero;
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
 

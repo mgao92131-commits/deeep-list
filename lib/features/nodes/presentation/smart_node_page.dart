@@ -476,6 +476,8 @@ class _SmartNodePageState extends ConsumerState<SmartNodePage>
                     onToggleDone: () => _handleToggleDone(activeItem.node),
                     onToggleFavorite: () =>
                         _handleToggleFavorite(activeItem.node),
+                    onDueDateInteractionChanged: (active) =>
+                        _editorSession.isSelectingDueDate = active,
                     onDueDateChanged: (date) =>
                         _handleDueDateChanged(activeItem.node, date),
                     onRequestRestoreFocus: () => _restoreFocus(activeItem.id),

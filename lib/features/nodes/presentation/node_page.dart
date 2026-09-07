@@ -784,13 +784,13 @@ class _NodePageState extends ConsumerState<NodePage>
                         ),
                       );
                     },
-                    onDueDateChanged: (date) {
-                      unawaited(
-                        _runMutation(
-                          () => ref
-                              .read(treeCommandServiceProvider)
-                              .updateDueDate(activeItem.id, date),
-                        ),
+                    onDueDateInteractionChanged: (active) =>
+                        _editorSession.isSelectingDueDate = active,
+                    onDueDateChanged: (date) async {
+                      await _runMutation(
+                        () => ref
+                            .read(treeCommandServiceProvider)
+                            .updateDueDate(activeItem.id, date),
                       );
                     },
                     onRequestRestoreFocus: () => _restoreFocus(activeItem.id),

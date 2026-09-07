@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../domain/node_color.dart';
 import '../../domain/node_id.dart';
+import 'keyboard_date_menu.dart';
 
 class KeyboardToolbar extends StatefulWidget {
   final NodeId? activeNodeId;
@@ -12,7 +13,8 @@ class KeyboardToolbar extends StatefulWidget {
   final ValueChanged<NodeColor>? onColorSelected;
   final VoidCallback? onToggleDone;
   final VoidCallback? onToggleFavorite;
-  final ValueChanged<DateTime?>? onDueDateChanged;
+  final Future<void> Function(DateTime?)? onDueDateChanged;
+  final ValueChanged<bool>? onDueDateInteractionChanged;
   final VoidCallback? onRequestRestoreFocus;
 
   const KeyboardToolbar({
@@ -26,6 +28,7 @@ class KeyboardToolbar extends StatefulWidget {
     this.onToggleDone,
     this.onToggleFavorite,
     this.onDueDateChanged,
+    this.onDueDateInteractionChanged,
     this.onRequestRestoreFocus,
   });
 
@@ -164,7 +167,7 @@ class _KeyboardToolbarState extends State<KeyboardToolbar> {
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
-      child: PopupMenuButton<String>(
+      child: KeyboardDateMenu(
         tooltip: '截止日期',
         icon: Icon(
           hasDueDate ? Icons.event : Icons.event_outlined,
@@ -173,34 +176,41 @@ class _KeyboardToolbarState extends State<KeyboardToolbar> {
               ? theme.colorScheme.primary
               : theme.colorScheme.onSurfaceVariant,
         ),
-        position: PopupMenuPosition.over,
-        onCanceled: widget.onRequestRestoreFocus,
+        onOpened: () => widget.onDueDateInteractionChanged?.call(true),
+        onCanceled: () {
+          widget.onDueDateInteractionChanged?.call(false);
+          widget.onRequestRestoreFocus?.call();
+        },
         onSelected: (action) async {
-          if (action == 'today') {
-            widget.onDueDateChanged?.call(today);
-            widget.onRequestRestoreFocus?.call();
-          } else if (action == 'tomorrow') {
-            widget.onDueDateChanged?.call(tomorrow);
-            widget.onRequestRestoreFocus?.call();
-          } else if (action == 'next_monday') {
-            widget.onDueDateChanged?.call(nextMonday);
-            widget.onRequestRestoreFocus?.call();
-          } else if (action == 'remove') {
-            widget.onDueDateChanged?.call(null);
-            widget.onRequestRestoreFocus?.call();
-          } else if (action == 'custom') {
-            final picked = await showDatePicker(
-              context: context,
-              initialDate: currentDueDate ?? today,
-              firstDate: DateTime(2000),
-              lastDate: DateTime(2100),
-            );
-            if (picked != null) {
-              widget.onDueDateChanged?.call(
-                DateTime(picked.year, picked.month, picked.day),
+          // Keep the editor alive across the popup, date picker and save.
+          final onChanged = widget.onDueDateChanged;
+          final onInteractionChanged = widget.onDueDateInteractionChanged;
+          final restoreFocus = widget.onRequestRestoreFocus;
+          try {
+            if (action == 'today') {
+              await onChanged?.call(today);
+            } else if (action == 'tomorrow') {
+              await onChanged?.call(tomorrow);
+            } else if (action == 'next_monday') {
+              await onChanged?.call(nextMonday);
+            } else if (action == 'remove') {
+              await onChanged?.call(null);
+            } else if (action == 'custom') {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: currentDueDate ?? today,
+                firstDate: DateTime(2000),
+                lastDate: DateTime(2100),
               );
+              if (picked != null) {
+                await onChanged?.call(
+                  DateTime(picked.year, picked.month, picked.day),
+                );
+              }
             }
-            widget.onRequestRestoreFocus?.call();
+          } finally {
+            onInteractionChanged?.call(false);
+            if (mounted) restoreFocus?.call();
           }
         },
         itemBuilder: (context) {

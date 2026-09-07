@@ -238,7 +238,7 @@ class NodeEditingCoordinator {
       keyboardSessionGeneration = editorSession.focusGeneration;
     }
 
-    if (editorSession.hasPendingFocus) {
+    if (editorSession.hasPendingFocus || editorSession.isSelectingDueDate) {
       lastBottomInset = bottomInset;
       return;
     }

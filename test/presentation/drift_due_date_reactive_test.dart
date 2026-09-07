@@ -103,6 +103,86 @@ void main() {
       await tearDownApp(tester);
     });
 
+    for (final action in ['today', 'custom-save', 'custom-cancel', 'cancel']) {
+      testWidgets('日期交互遇到键盘隐藏仍保留编辑会话: $action', (tester) async {
+        addTearDown(tester.view.resetViewInsets);
+        final node = await harness.commands.createNode(
+          parentId: null,
+          content: 'Keyboard Date Task',
+        );
+        await pumpApp(tester);
+        await tester.tap(find.text('Keyboard Date Task'));
+        await tester.pumpAndSettle();
+        tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(
+            of: find.byType(KeyboardToolbar),
+            matching: find.byTooltip('截止日期'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        // Quick menu must not take focus from the editor.
+        final menuBounds = tester.getRect(
+          find.byKey(const ValueKey('keyboard-date-menu-surface')),
+        );
+        final toolbarBounds = tester.getRect(find.byType(KeyboardToolbar));
+        expect(menuBounds.bottom, lessThanOrEqualTo(toolbarBounds.top));
+        expect(
+          tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus,
+          isTrue,
+        );
+        if (action.startsWith('custom')) {
+          await tester.tap(
+            find.byWidgetPredicate(
+              (w) => w is PopupMenuItem<String> && w.value == 'custom',
+            ),
+          );
+          await tester.pumpAndSettle();
+        }
+        // A real IME reports zero insets when the date picker takes focus.
+        tester.view.viewInsets = FakeViewPadding.zero;
+        await tester.pumpAndSettle();
+        expect(
+          find.byType(KeyboardToolbar, skipOffstage: false),
+          findsOneWidget,
+        );
+        if (action.startsWith('custom')) {
+          await tester.tap(
+            find.text(action == 'custom-save' ? 'OK' : 'Cancel'),
+          );
+        } else if (action == 'cancel') {
+          await tester.tapAt(const Offset(5, 5));
+        } else {
+          await tester.tap(
+            find.byWidgetPredicate(
+              (w) => w is PopupMenuItem<String> && w.value == 'today',
+            ),
+          );
+        }
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus,
+          isTrue,
+        );
+        final saved = action == 'today' || action == 'custom-save';
+        final updated = await harness.repository.getNode(node.id);
+        expect(updated!.dueDate, saved ? isNotNull : isNull);
+        expect(find.text('今天'), saved ? findsOneWidget : findsNothing);
+        if (saved) {
+          await tester.tap(find.byKey(const ValueKey('smart-entry-due-dates')));
+          await tester.pumpAndSettle();
+          expect(find.text('Keyboard Date Task'), findsOneWidget);
+          await tester.tap(find.byTooltip('Back'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('smart-entry-today')));
+          await tester.pumpAndSettle();
+          expect(find.text('Keyboard Date Task'), findsOneWidget);
+        }
+        await tearDownApp(tester);
+      });
+    }
+
     testWidgets('Due Dates 智能列表在页面打开状态下的实时进入、跨组移动与自动消失', (tester) async {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);

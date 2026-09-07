@@ -20,6 +20,7 @@ class EditorSession {
   final Map<NodeId, _EditorRegistration> _registrations = {};
   final Set<NodeId> _blurCommitSuppressed = {};
   NodeId? activeNodeId;
+  bool isSelectingDueDate = false;
   NodeId? _pendingFocusNodeId;
   int? _pendingCursor;
   int _focusGeneration = 0;

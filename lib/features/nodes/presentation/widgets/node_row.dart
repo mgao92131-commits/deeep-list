@@ -90,6 +90,7 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
     if (_focusNode.hasFocus) {
       widget.editorSession.markActive(widget.item.node.id);
     } else {
+      if (widget.editorSession.isSelectingDueDate) return;
       widget.onBlur?.call(_controller.text);
       if (widget.editorSession.shouldCommitOnBlur(widget.item.node.id) &&
           _controller.text != widget.item.node.content) {
