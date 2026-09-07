@@ -135,10 +135,16 @@ void main() {
       // 子节点数量显示在最右侧 (2)
       expect(find.text('2'), findsOneWidget);
 
+      final normalLeft = tester.getTopLeft(find.text('Unfav Item')).dx;
+      expect(tester.getTopLeft(find.text('Fav Item')).dx, normalLeft + 26);
+      final trailingPosition = tester.getCenter(find.text('2'));
+
       // 取消收藏后，实心星消失，但文本依然稳定
       await commands.toggleFavorite(p1.id);
       await tester.pumpAndSettle();
       expect(find.byIcon(Icons.star), findsNothing);
+      expect(tester.getTopLeft(find.text('Fav Item')).dx, normalLeft);
+      expect(tester.getCenter(find.text('2')), trailingPosition);
     });
 
     testWidgets('键盘工具栏收藏 Toggle 不会结束编辑，焦点保持在 TextField', (tester) async {

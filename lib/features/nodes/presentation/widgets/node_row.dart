@@ -402,17 +402,16 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Fixed leading favorite slot: ensures text alignment stability
-        SizedBox(
-          width: 22,
-          height: 22,
-          child: isFavorite
-              ? const Center(
-                  child: Icon(Icons.star, size: 17, color: Color(0xFFF59E0B)),
-                )
-              : null,
-        ),
-        const SizedBox(width: 4),
+        if (isFavorite) ...[
+          const SizedBox(
+            width: 22,
+            height: 22,
+            child: Center(
+              child: Icon(Icons.star, size: 17, color: Color(0xFFF59E0B)),
+            ),
+          ),
+          const SizedBox(width: 4),
+        ],
         Expanded(
           child: Column(
             mainAxisSize: MainAxisSize.min,
