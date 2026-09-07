@@ -6,6 +6,7 @@ import '../domain/node.dart';
 import '../domain/node_id.dart';
 import 'editor_session.dart';
 import 'models/visible_node_item.dart';
+import 'widgets/node_reorder_region.dart';
 import 'widgets/node_row.dart';
 
 class NodeList extends StatelessWidget {
@@ -92,35 +93,26 @@ class NodeList extends StatelessWidget {
             onReorderItem: _handleReorder,
             itemBuilder: (context, index) {
               final item = items[index];
-              final dragHandle = ReorderableDragStartListener(
+              return NodeReorderRegion(
+                key: ValueKey('reorder-${item.id}'),
                 index: index,
                 enabled: editingNodeId == null,
-                child: Center(
-                  child: Icon(
-                    Icons.drag_indicator,
-                    size: 20,
-                    color: theme.colorScheme.onSurfaceVariant.withValues(
-                      alpha: 0.38,
-                    ),
-                  ),
+                onLongPressRelease: () => onLongPress(item.node),
+                child: NodeRow(
+                  key: ValueKey(item.id),
+                  item: item,
+                  isEditing: editingNodeId == item.id,
+                  editorSession: editorSession,
+                  onStartEditing: () => onStartEditing(item.node),
+                  onNavigate: () => onNavigate(item.node),
+                  onCommit: (text) => onCommit(item.id, text),
+                  onChanged: (text) => onChanged(item.node, text),
+                  onBlur: onBlur,
+                  onEnter: (cursor, text) => onEnter(item.node, cursor, text),
+                  onBackspaceEmpty: () => onBackspaceEmpty(item.node),
+                  onIndent: () => onIndent(item.id),
+                  onOutdent: () => onOutdent(item.id),
                 ),
-              );
-              return NodeRow(
-                key: ValueKey(item.id),
-                item: item,
-                isEditing: editingNodeId == item.id,
-                editorSession: editorSession,
-                dragHandle: dragHandle,
-                onLongPress: () => onLongPress(item.node),
-                onStartEditing: () => onStartEditing(item.node),
-                onNavigate: () => onNavigate(item.node),
-                onCommit: (text) => onCommit(item.id, text),
-                onChanged: (text) => onChanged(item.node, text),
-                onBlur: onBlur,
-                onEnter: (cursor, text) => onEnter(item.node, cursor, text),
-                onBackspaceEmpty: () => onBackspaceEmpty(item.node),
-                onIndent: () => onIndent(item.id),
-                onOutdent: () => onOutdent(item.id),
               );
             },
           ),

@@ -19,8 +19,6 @@ class NodeRow extends StatefulWidget {
   final Future<void> Function() onBackspaceEmpty;
   final VoidCallback onIndent;
   final VoidCallback onOutdent;
-  final VoidCallback? onLongPress;
-  final Widget? dragHandle;
 
   const NodeRow({
     super.key,
@@ -36,8 +34,6 @@ class NodeRow extends StatefulWidget {
     required this.onBackspaceEmpty,
     required this.onIndent,
     required this.onOutdent,
-    this.onLongPress,
-    this.dragHandle,
   });
 
   @override
@@ -264,10 +260,6 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
       decoration: widget.item.isDone ? TextDecoration.lineThrough : null,
     );
 
-    final actualLeftPadding = widget.dragHandle != null
-        ? 36.0
-        : innerLeftPadding;
-
     Widget content;
     if (widget.isEditing) {
       content = TextField(
@@ -323,7 +315,6 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
         onHorizontalDragCancel: widget.isEditing
             ? null
             : _onHorizontalDragCancel,
-        onLongPress: widget.isEditing ? null : widget.onLongPress,
         onTap: () {
           if (!widget.isEditing) {
             widget.onStartEditing();
@@ -357,19 +348,10 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
                 child: Stack(
                   alignment: Alignment.centerLeft,
                   children: [
-                    // Independent Drag Handle
-                    if (widget.dragHandle != null)
-                      Positioned(
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        width: 32,
-                        child: widget.dragHandle!,
-                      ),
                     // Main text content (left and right edge paddings are permanent)
                     Padding(
-                      padding: EdgeInsets.only(
-                        left: actualLeftPadding,
+                      padding: const EdgeInsets.only(
+                        left: innerLeftPadding,
                         right: rightPadding,
                         top: 12,
                         bottom: 12,

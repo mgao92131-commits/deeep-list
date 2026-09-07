@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -166,14 +167,21 @@ void main() {
     },
   );
 
-  // E. 长按菜单
+  // E. 长按菜单（长按不移动打开菜单，顺序不变）
   testWidgets(
-    'E. long press node opens NodeActionMenu while mode stays normal',
+    'E. long press node without moving opens NodeActionMenu while mode stays normal and order unchanged',
     (tester) async {
-      await commands.createNode(parentId: null, content: 'Item');
+      await commands.createNode(parentId: null, content: 'Item 1');
+      await commands.createNode(parentId: null, content: 'Item 2');
       await pumpApp(tester);
 
-      await tester.longPress(find.text('Item'));
+      expect(find.byIcon(Icons.drag_indicator), findsNothing);
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text('Item 1')),
+      );
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      await gesture.up();
       await tester.pumpAndSettle();
 
       // Menu options exist
@@ -186,45 +194,75 @@ void main() {
         tester.element(find.byType(DeepListApp)),
       ).read(nodePageControllerProvider(null));
       expect(controller.mode, PageMode.normal);
+
+      // Order unchanged
+      final siblings = await repository.getChildren(null);
+      expect(siblings.map((n) => n.content).toList(), ['Item 1', 'Item 2']);
     },
   );
 
-  // F. 编辑时长按
-  testWidgets('F. long press during editing does not open NodeActionMenu', (
-    tester,
-  ) async {
-    await commands.createNode(parentId: null, content: 'EditingNode');
-    await pumpApp(tester);
-
-    // Enter editing
-    await tester.tap(find.text('EditingNode'));
-    await tester.pumpAndSettle();
-
-    // Long press text field
-    await tester.longPress(find.byType(TextField));
-    await tester.pumpAndSettle();
-
-    // NodeActionMenu should not be open
-    expect(find.text('归档'), findsNothing);
-    expect(find.text('删除'), findsNothing);
-  });
-
-  // G. 拖动柄排序同级
+  // F. 编辑时长按 TextField 不触发菜单或 reorder
   testWidgets(
-    'G. reorder via drag handle reorders siblings and preserves parentId',
+    'F. long press during editing does not open NodeActionMenu or trigger reorder',
+    (tester) async {
+      await commands.createNode(parentId: null, content: 'EditingNode');
+      await commands.createNode(parentId: null, content: 'SecondNode');
+      await pumpApp(tester);
+
+      expect(find.byIcon(Icons.drag_indicator), findsNothing);
+
+      // Enter editing
+      await tester.tap(find.text('EditingNode'));
+      await tester.pumpAndSettle();
+
+      // Long press text field and move
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(TextField)),
+      );
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      await gesture.moveBy(const Offset(0, 100));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      // NodeActionMenu should not be open
+      expect(find.text('归档'), findsNothing);
+      expect(find.text('删除'), findsNothing);
+
+      final siblings = await repository.getChildren(null);
+      expect(siblings.map((n) => n.content).toList(), [
+        'EditingNode',
+        'SecondNode',
+      ]);
+    },
+  );
+
+  // G. 长按后明显移动执行同级 reorder，不打开菜单，且 parentId 保持不变
+  testWidgets(
+    'G. long press and move vertically reorders siblings without opening menu, and preserves parentId',
     (tester) async {
       await commands.createNode(parentId: null, content: 'Item 1');
       await commands.createNode(parentId: null, content: 'Item 2');
       await commands.createNode(parentId: null, content: 'Item 3');
       await pumpApp(tester);
 
-      // Find drag handles
-      final handles = find.byIcon(Icons.drag_indicator);
-      expect(handles, findsNWidgets(3));
+      // No drag handle exists
+      expect(find.byIcon(Icons.drag_indicator), findsNothing);
 
-      // Drag handle 0 down by 120dp
-      await tester.drag(handles.at(0), const Offset(0, 120));
+      // Start gesture on Item 1, wait for kLongPressTimeout, then drag down
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text('Item 1')),
+      );
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      // Move down significantly (> 12dp, e.g. 120dp)
+      await gesture.moveBy(const Offset(0, 120));
+      await tester.pump();
+      await gesture.up();
       await tester.pumpAndSettle();
+
+      // Menu should NOT open
+      expect(find.text('删除'), findsNothing);
+      expect(find.text('复制'), findsNothing);
 
       final siblings = await repository.getChildren(null);
       expect(siblings.map((n) => n.content).toList(), [
@@ -238,24 +276,56 @@ void main() {
     },
   );
 
-  // H. 长按正文不再启动拖动
+  // H1. 长按后移动约 4dp 仍打开菜单
   testWidgets(
-    'H. long press body opens NodeActionMenu without triggering reorder',
+    'H1. long press and slight move (~4dp) still opens menu upon release',
     (tester) async {
-      await commands.createNode(parentId: null, content: 'Alpha');
-      await commands.createNode(parentId: null, content: 'Beta');
+      await commands.createNode(parentId: null, content: 'Item 1');
+      await commands.createNode(parentId: null, content: 'Item 2');
       await pumpApp(tester);
 
-      await tester.longPress(find.text('Alpha'));
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text('Item 1')),
+      );
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      // Move 4dp (< 12dp threshold)
+      await gesture.moveBy(const Offset(0, 4));
+      await tester.pump();
+      await gesture.up();
       await tester.pumpAndSettle();
 
       expect(find.text('删除'), findsOneWidget);
+      expect(find.text('复制'), findsOneWidget);
 
-      // Order has not changed
       final siblings = await repository.getChildren(null);
-      expect(siblings.map((n) => n.content).toList(), ['Alpha', 'Beta']);
+      expect(siblings.map((n) => n.content).toList(), ['Item 1', 'Item 2']);
     },
   );
+
+  // H2. 普通上下拖动不 reorder，只滚动列表
+  testWidgets('H2. normal vertical drag does not reorder, only scrolls list', (
+    tester,
+  ) async {
+    for (var i = 1; i <= 20; i++) {
+      await commands.createNode(parentId: null, content: 'ScrollItem $i');
+    }
+    await pumpApp(tester);
+
+    expect(find.byIcon(Icons.drag_indicator), findsNothing);
+
+    // Drag up without waiting for long press timeout
+    await tester.drag(find.text('ScrollItem 1'), const Offset(0, -200));
+    await tester.pumpAndSettle();
+
+    // Menu should NOT be open
+    expect(find.text('删除'), findsNothing);
+
+    // Sibling order in repository remains strictly identical
+    final siblings = await repository.getChildren(null);
+    expect(siblings[0].content, 'ScrollItem 1');
+    expect(siblings[1].content, 'ScrollItem 2');
+    expect(siblings[2].content, 'ScrollItem 3');
+  });
 
   // I. 粘贴位置
   testWidgets('I. paste creates sibling directly below target node', (
@@ -411,18 +481,31 @@ void main() {
     expect(find.text('删除'), findsOneWidget);
   });
 
-  // O. 左右滑动保持
-  testWidgets('O. swipe right indents node', (tester) async {
+  // O. 左右滑动保持 (indent / outdent)
+  testWidgets('O. swipe right indents node and swipe left outdents node', (
+    tester,
+  ) async {
     final first = await commands.createNode(parentId: null, content: 'First');
     final second = await commands.createNode(parentId: null, content: 'Second');
     await pumpApp(tester);
 
-    // Swipe right on Second by 80dp
+    // Swipe right on Second by 80dp to indent under first
     await tester.drag(find.text('Second'), const Offset(80, 0));
     await tester.pumpAndSettle();
 
     final updated = await repository.getNode(second.id);
     expect(updated!.parentId, first.id);
+
+    // Enter subpage of First where Second is now located
+    await tester.tap(find.text('1'));
+    await tester.pumpAndSettle();
+
+    // Swipe left on Second by -80dp to outdent back to root
+    await tester.drag(find.text('Second'), const Offset(-80, 0));
+    await tester.pumpAndSettle();
+
+    final outdented = await repository.getNode(second.id);
+    expect(outdented!.parentId, isNull);
   });
 
   // Case 1: Copy A -> Delete A -> Paste under B -> fails gracefully, clipboard cleared, snackbar

@@ -65,6 +65,7 @@ void main() {
     await tester.tap(find.text('TestNode'));
     await tester.pumpAndSettle();
 
+    expect(find.byIcon(Icons.drag_indicator), findsNothing);
     expect(find.byType(TextField), findsOneWidget);
     final controller = ProviderScope.containerOf(
       tester.element(find.byType(DeepListApp)),
