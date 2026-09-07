@@ -12,7 +12,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'deep_list'));
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -26,6 +26,9 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 3) {
         await migrator.addColumn(nodes, nodes.color);
+      }
+      if (from < 4) {
+        await migrator.addColumn(nodes, nodes.dueDate);
       }
     },
     beforeOpen: (details) async {

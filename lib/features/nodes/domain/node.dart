@@ -13,6 +13,7 @@ class Node {
   final bool isFavorite;
   final bool isArchived;
   final NodeColor color;
+  final DateTime? dueDate;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -26,9 +27,15 @@ class Node {
     required this.isFavorite,
     required this.isArchived,
     this.color = NodeColor.none,
+    this.dueDate,
     required this.createdAt,
     required this.updatedAt,
   });
+
+  static DateTime? normalizeDate(DateTime? dt) {
+    if (dt == null) return null;
+    return DateTime(dt.year, dt.month, dt.day);
+  }
 
   Node copyWith({
     Object? parentId = _unset,
@@ -39,6 +46,7 @@ class Node {
     bool? isFavorite,
     bool? isArchived,
     NodeColor? color,
+    Object? dueDate = _unset,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -54,6 +62,9 @@ class Node {
       isFavorite: isFavorite ?? this.isFavorite,
       isArchived: isArchived ?? this.isArchived,
       color: color ?? this.color,
+      dueDate: identical(dueDate, _unset)
+          ? this.dueDate
+          : dueDate as DateTime?,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

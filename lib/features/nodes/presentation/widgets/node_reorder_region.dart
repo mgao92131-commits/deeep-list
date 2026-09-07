@@ -7,13 +7,15 @@ import 'package:flutter/services.dart';
 class NodeReorderRegion extends StatefulWidget {
   final int index;
   final bool enabled;
-  final VoidCallback onLongPressRelease;
+  final bool canReorder;
+  final ValueChanged<Offset> onLongPressRelease;
   final Widget child;
 
   const NodeReorderRegion({
     super.key,
     required this.index,
     required this.enabled,
+    this.canReorder = true,
     required this.onLongPressRelease,
     required this.child,
   });
@@ -71,8 +73,9 @@ class _NodeReorderRegionState extends State<NodeReorderRegion> {
     _cancelTimer();
     if (widget.enabled && _longPressArmed && !_movedAfterLongPress) {
       final onRelease = widget.onLongPressRelease;
+      final pos = _downPosition ?? event.position;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        onRelease();
+        onRelease(pos);
       });
     }
     _downPosition = null;
@@ -107,7 +110,7 @@ class _NodeReorderRegionState extends State<NodeReorderRegion> {
       onPointerCancel: _onPointerCancel,
       child: ReorderableDelayedDragStartListener(
         index: widget.index,
-        enabled: widget.enabled,
+        enabled: widget.enabled && widget.canReorder,
         child: widget.child,
       ),
     );

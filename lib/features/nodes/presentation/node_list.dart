@@ -14,7 +14,8 @@ class NodeList extends StatelessWidget {
   final NodeId? parentId;
   final NodeId? editingNodeId;
   final EditorSession editorSession;
-  final void Function(Node node) onLongPress;
+  final bool isArchivedView;
+  final void Function(Node node, Offset position) onLongPress;
   final Future<void> Function(Node node) onStartEditing;
   final Future<void> Function(NodeId id, String text) onCommit;
   final void Function(Node node, String text) onChanged;
@@ -36,6 +37,7 @@ class NodeList extends StatelessWidget {
     required this.parentId,
     required this.editingNodeId,
     required this.editorSession,
+    this.isArchivedView = false,
     required this.onLongPress,
     required this.onStartEditing,
     required this.onCommit,
@@ -53,6 +55,7 @@ class NodeList extends StatelessWidget {
   });
 
   void _handleReorder(int oldIndex, int newIndex) {
+    if (isArchivedView) return;
     if (oldIndex < 0 || oldIndex >= items.length) return;
     if (newIndex < 0 || newIndex >= items.length) return;
     if (oldIndex == newIndex) return;
@@ -90,14 +93,15 @@ class NodeList extends StatelessWidget {
                 child: child,
               );
             },
-            onReorderItem: _handleReorder,
+            onReorderItem: isArchivedView ? (_, _) {} : _handleReorder,
             itemBuilder: (context, index) {
               final item = items[index];
               return NodeReorderRegion(
                 key: ValueKey('reorder-${item.id}'),
                 index: index,
                 enabled: editingNodeId == null,
-                onLongPressRelease: () => onLongPress(item.node),
+                canReorder: !isArchivedView,
+                onLongPressRelease: (pos) => onLongPress(item.node, pos),
                 child: NodeRow(
                   key: ValueKey(item.id),
                   item: item,
@@ -123,14 +127,14 @@ class NodeList extends StatelessWidget {
           child: GestureDetector(
             key: const ValueKey('blank-area'),
             behavior: HitTestBehavior.opaque,
-            onTap: onBlankAreaTap,
+            onTap: isArchivedView ? null : onBlankAreaTap,
             child: Container(
               constraints: const BoxConstraints(minHeight: 120),
               color: Colors.transparent,
               child: items.isEmpty
                   ? Center(
                       child: Text(
-                        '点击空白处开始记录',
+                        isArchivedView ? '暂无已归档内容' : '点击空白处开始记录',
                         style: TextStyle(
                           fontSize: 15,
                           color: theme.colorScheme.onSurfaceVariant.withValues(

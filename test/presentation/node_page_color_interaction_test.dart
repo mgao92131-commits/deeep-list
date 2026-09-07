@@ -99,10 +99,10 @@ void main() {
     },
   );
 
-  testWidgets('Long-press menu background color entry updates node color', (
+  testWidgets('Long-press context menu does not contain background color entry', (
     tester,
   ) async {
-    final node = await commands.createNode(
+    await commands.createNode(
       parentId: null,
       content: 'Long Press Me',
     );
@@ -112,20 +112,11 @@ void main() {
     await tester.longPress(find.text('Long Press Me'));
     await tester.pumpAndSettle();
 
-    // Check '背景色' is in the action menu
-    expect(find.text('背景色'), findsOneWidget);
-
-    // Tap '背景色'
-    await tester.tap(find.text('背景色'));
-    await tester.pumpAndSettle();
-
-    // Pick '红' (Red)
-    expect(find.text('选择背景色'), findsOneWidget);
-    await tester.tap(find.byTooltip('红'));
-    await tester.pumpAndSettle();
-
-    // Menu dismissed and database updated
-    final updated = await repository.getNode(node.id);
-    expect(updated?.color, NodeColor.red);
+    // Check '背景色' is NOT in the action menu
+    expect(find.text('背景色'), findsNothing);
+    // Menu still contains standard actions
+    expect(find.text('复制'), findsOneWidget);
+    expect(find.text('归档'), findsOneWidget);
+    expect(find.text('删除'), findsOneWidget);
   });
 }

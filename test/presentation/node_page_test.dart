@@ -497,11 +497,11 @@ void main() {
         tester.element(find.byType(DeepListApp)),
       );
 
-      // Rule: childCount > 0 shows number, chevron permanently exists on all rows
-      // Parent A has 2 unarchived children -> shows "2" and chevron
+      // Rule: childCount > 0 shows number, leaf nodes show chevron
+      // Parent A has 2 unarchived children -> shows "2"
       expect(find.text('2'), findsOneWidget);
-      // Both Parent A and Parent B show chevron_right
-      expect(find.byIcon(Icons.chevron_right), findsNWidgets(2));
+      // Parent B shows chevron_right
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
 
       // Tap count '2' or chevron in Normal directly enters subpage!
       await tester.tap(find.text('2'));
@@ -529,21 +529,21 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(TextField), findsOneWidget);
 
-      // Even in Editing mode, chevrons remain permanently visible
-      expect(find.byIcon(Icons.chevron_right), findsNWidgets(2));
+      // In Editing mode, Parent B chevron remains visible
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
       expect(find.text('2'), findsOneWidget);
 
       // Exit editing to normal
       container.read(nodePageControllerProvider(null).notifier).toNormal();
       await tester.pumpAndSettle();
 
-      // Dragging mode -> trailing slot preserves child count and chevrons
+      // Dragging mode -> trailing slot preserves child count and chevron
       container
           .read(nodePageControllerProvider(null).notifier)
           .startDragging(parentA.id);
       await tester.pump();
       expect(find.text('2'), findsOneWidget);
-      expect(find.byIcon(Icons.chevron_right), findsNWidgets(2));
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
     },
   );
 

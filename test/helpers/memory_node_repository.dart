@@ -54,6 +54,57 @@ class MemoryNodeRepository implements TreeMutationRepository {
     yield* _changes.stream.map((_) => read());
   }
 
+  @override
+  Stream<List<Node>> watchFavorites() async* {
+    List<Node> read() {
+      final list = _nodes.values
+          .where((node) => node.isFavorite && !node.isDone && !node.isArchived)
+          .toList();
+      list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      return list;
+    }
+
+    yield read();
+    yield* _changes.stream.map((_) => read());
+  }
+
+  @override
+  Stream<List<Node>> watchDueNodes() async* {
+    List<Node> read() {
+      final list = _nodes.values
+          .where((node) => node.dueDate != null && !node.isDone && !node.isArchived)
+          .toList();
+      list.sort((a, b) {
+        final cmp = a.dueDate!.compareTo(b.dueDate!);
+        if (cmp != 0) return cmp;
+        final posCmp = a.position.compareTo(b.position);
+        if (posCmp != 0) return posCmp;
+        return a.id.compareTo(b.id);
+      });
+      return list;
+    }
+
+    yield read();
+    yield* _changes.stream.map((_) => read());
+  }
+
+  @override
+  Future<List<Node>> getAncestors(NodeId nodeId) async {
+    final ancestors = <Node>[];
+    final visited = <NodeId>{nodeId};
+    var currentId = nodeId;
+    while (true) {
+      final node = _nodes[currentId];
+      if (node == null || node.parentId == null) break;
+      if (!visited.add(node.parentId!)) break;
+      final parent = _nodes[node.parentId!];
+      if (parent == null) break;
+      ancestors.insert(0, parent);
+      currentId = parent.id;
+    }
+    return ancestors;
+  }
+
   Duration? transactionDelay;
 
   @override

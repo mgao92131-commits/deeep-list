@@ -7,7 +7,7 @@ import 'package:deep_list/features/nodes/presentation/widgets/keyboard_toolbar.d
 void main() {
   group('KeyboardToolbar', () {
     testWidgets(
-      'renders normal toolbar with palette button and fixed 44dp height',
+      'renders simplified normal toolbar with palette and done button at 44dp height',
       (tester) async {
         await tester.pumpWidget(
           MaterialApp(
@@ -15,12 +15,9 @@ void main() {
               body: KeyboardToolbar(
                 activeNodeId: 'node-1',
                 currentColor: NodeColor.none,
-                canOutdent: true,
-                canIndent: true,
-                onOutdent: () {},
-                onIndent: () {},
+                isDone: false,
                 onColorSelected: (_) {},
-                onDone: () {},
+                onToggleDone: () {},
               ),
             ),
           ),
@@ -29,11 +26,24 @@ void main() {
         // Verify 44dp height
         expect(tester.getSize(find.byType(KeyboardToolbar)).height, 44.0);
 
-        // Palette button is visible
+        // Does NOT contain Indent / Outdent
+        expect(find.byTooltip('Indent'), findsNothing);
+        expect(find.byTooltip('Outdent'), findsNothing);
+        expect(find.byIcon(Icons.format_indent_decrease), findsNothing);
+        expect(find.byIcon(Icons.format_indent_increase), findsNothing);
+
+        // Contains color palette entry
         expect(find.byTooltip('颜色'), findsOneWidget);
-        expect(find.byTooltip('Indent'), findsOneWidget);
-        expect(find.byTooltip('Outdent'), findsOneWidget);
-        expect(find.text('完成'), findsOneWidget);
+        expect(find.byIcon(Icons.palette_outlined), findsOneWidget);
+
+        // Does NOT contain more button
+        expect(find.byTooltip('更多'), findsNothing);
+        expect(find.byIcon(Icons.more_horiz), findsNothing);
+
+        // Contains done button
+        expect(find.text('完成'), findsNothing);
+        expect(find.byTooltip('完成'), findsOneWidget);
+        expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
       },
     );
 
@@ -50,16 +60,13 @@ void main() {
                   return KeyboardToolbar(
                     activeNodeId: 'node-1',
                     currentColor: selectedColor ?? NodeColor.none,
-                    canOutdent: true,
-                    canIndent: true,
-                    onOutdent: () {},
-                    onIndent: () {},
+                    isDone: false,
                     onColorSelected: (color) {
                       setState(() {
                         selectedColor = color;
                       });
                     },
-                    onDone: () {},
+                    onToggleDone: () {},
                   );
                 },
               ),
@@ -78,9 +85,7 @@ void main() {
         expect(tester.getSize(find.byType(KeyboardToolbar)).height, 44.0);
 
         // Normal buttons are hidden
-        expect(find.byTooltip('Indent'), findsNothing);
-        expect(find.byTooltip('Outdent'), findsNothing);
-        expect(find.text('完成'), findsNothing);
+        expect(find.byTooltip('完成'), findsNothing);
 
         // Color toolbar elements are visible
         expect(find.byTooltip('返回'), findsOneWidget);
@@ -101,8 +106,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byTooltip('颜色'), findsOneWidget);
-        expect(find.byTooltip('Indent'), findsOneWidget);
-        expect(find.text('完成'), findsOneWidget);
+        expect(find.byTooltip('完成'), findsOneWidget);
       },
     );
 
@@ -129,12 +133,9 @@ void main() {
                       KeyboardToolbar(
                         activeNodeId: currentId,
                         currentColor: NodeColor.none,
-                        canOutdent: true,
-                        canIndent: true,
-                        onOutdent: () {},
-                        onIndent: () {},
+                        isDone: false,
                         onColorSelected: (_) {},
-                        onDone: () {},
+                        onToggleDone: () {},
                       ),
                     ],
                   );

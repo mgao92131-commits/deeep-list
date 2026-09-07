@@ -122,6 +122,7 @@ class TreeCommandService {
         isFavorite: sourceRoot.isFavorite,
         isArchived: false,
         color: sourceRoot.color,
+        dueDate: sourceRoot.dueDate,
         createdAt: now,
         updatedAt: now,
       );
@@ -142,6 +143,7 @@ class TreeCommandService {
           isFavorite: oldNode.isFavorite,
           isArchived: oldNode.isArchived,
           color: oldNode.color,
+          dueDate: oldNode.dueDate,
           createdAt: now,
           updatedAt: now,
         );
@@ -235,6 +237,18 @@ class TreeCommandService {
       final node = await _requireNode(transaction, nodeId);
       await transaction.saveNode(
         node.copyWith(isFavorite: !node.isFavorite, updatedAt: _clock()),
+      );
+    });
+  }
+
+  Future<void> updateDueDate(NodeId nodeId, DateTime? dueDate) {
+    return _repository.transaction((transaction) async {
+      final node = await _requireNode(transaction, nodeId);
+      await transaction.saveNode(
+        node.copyWith(
+          dueDate: Node.normalizeDate(dueDate),
+          updatedAt: _clock(),
+        ),
       );
     });
   }

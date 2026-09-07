@@ -188,10 +188,12 @@ void main() {
       await tester.pumpAndSettle();
 
       // Menu options exist
+      expect(find.byType(BottomSheet), findsNothing);
       expect(find.text('复制'), findsOneWidget);
       expect(find.text('粘贴'), findsOneWidget);
       expect(find.text('归档'), findsOneWidget);
       expect(find.text('删除'), findsOneWidget);
+      expect(find.text('背景色'), findsNothing);
 
       final controller = ProviderScope.containerOf(
         tester.element(find.byType(DeepListApp)),
@@ -463,8 +465,8 @@ void main() {
     );
   });
 
-  // N. KeyboardToolbar ••• 打开操作菜单
-  testWidgets('N. keyboard toolbar more button opens NodeActionMenu', (
+  // N. KeyboardToolbar 保留完成与颜色按钮，无更多/缩进入口
+  testWidgets('N. keyboard toolbar has done and color buttons and does not contain more or indent buttons', (
     tester,
   ) async {
     await commands.createNode(parentId: null, content: 'Active');
@@ -474,14 +476,11 @@ void main() {
     await tester.tap(find.text('Active'));
     await tester.pumpAndSettle();
 
-    expect(find.byTooltip('更多'), findsOneWidget);
-    await tester.tap(find.byTooltip('更多'));
-    await tester.pumpAndSettle();
-
-    // NodeActionMenu opens
-    expect(find.text('复制'), findsOneWidget);
-    expect(find.text('归档'), findsOneWidget);
-    expect(find.text('删除'), findsOneWidget);
+    expect(find.byTooltip('完成'), findsOneWidget);
+    expect(find.byTooltip('颜色'), findsOneWidget);
+    expect(find.byTooltip('更多'), findsNothing);
+    expect(find.byTooltip('Indent'), findsNothing);
+    expect(find.byTooltip('Outdent'), findsNothing);
   });
 
   // O. 左右滑动保持 (indent / outdent)
@@ -569,9 +568,13 @@ void main() {
       await tester.enterText(find.byType(TextField), 'Freshly Typed');
       await tester.pump();
 
-      // Click more button on KeyboardToolbar to copy
-      expect(find.byTooltip('更多'), findsOneWidget);
-      await tester.tap(find.byTooltip('更多'));
+      // Exit editing mode via PopScope (back)
+      final dynamic popScope = tester.widget(find.byType(PopScope<void>));
+      popScope.onPopInvokedWithResult(false, null);
+      await tester.pumpAndSettle();
+
+      // Long press the node to copy
+      await tester.longPress(find.text('Freshly Typed'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('复制'));

@@ -342,7 +342,7 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
                 child: Stack(
                   alignment: Alignment.centerLeft,
                   children: [
-                    // Main text content (left and right edge paddings are permanent)
+                    // Main text content with leading favorite and secondary metadata
                     Padding(
                       padding: const EdgeInsets.only(
                         left: innerLeftPadding,
@@ -350,7 +350,7 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
                         top: 12,
                         bottom: 12,
                       ),
-                      child: content,
+                      child: _buildRowContent(context, theme, content),
                     ),
                     // Permanent 48dp Trailing Slot
                     Positioned(
@@ -376,6 +376,136 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
         ),
       ),
     );
+  }
+
+  Widget _buildRowContent(
+    BuildContext context,
+    ThemeData theme,
+    Widget textContent,
+  ) {
+    final isFavorite = widget.item.node.isFavorite;
+    final dueDate = widget.item.node.dueDate;
+    final pathText = widget.item.pathText;
+
+    final dueDateInfo = _formatDueDate(dueDate, theme);
+    final hasSecondary = dueDateInfo != null || pathText != null;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Fixed leading favorite slot: ensures text alignment stability
+        SizedBox(
+          width: 22,
+          height: 22,
+          child: isFavorite
+              ? const Center(
+                  child: Icon(
+                    Icons.star,
+                    size: 17,
+                    color: Color(0xFFF59E0B),
+                  ),
+                )
+              : null,
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              textContent,
+              if (hasSecondary) ...[
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    if (dueDateInfo != null)
+                      Text(
+                        dueDateInfo.label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.2,
+                          color: dueDateInfo.color,
+                          fontWeight: dueDateInfo.isOverdue
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    if (dueDateInfo != null && pathText != null) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        '·',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurfaceVariant.withValues(
+                            alpha: 0.4,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    if (pathText != null)
+                      Expanded(
+                        child: Text(
+                          pathText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.2,
+                            color: theme.colorScheme.onSurfaceVariant.withValues(
+                              alpha: 0.55,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  _NodeRowDueDateInfo? _formatDueDate(DateTime? dueDate, ThemeData theme) {
+    if (dueDate == null) return null;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final date = DateTime(dueDate.year, dueDate.month, dueDate.day);
+
+    if (date.isBefore(today)) {
+      final isYesterday =
+          date.isAtSameMomentAs(today.subtract(const Duration(days: 1)));
+      final label = isYesterday
+          ? '昨天 (已逾期)'
+          : '${date.month}月${date.day}日 (已逾期)';
+      return _NodeRowDueDateInfo(
+        label: label,
+        color: theme.colorScheme.error,
+        isOverdue: true,
+      );
+    } else if (date.isAtSameMomentAs(today)) {
+      return _NodeRowDueDateInfo(
+        label: '今天',
+        color: theme.colorScheme.primary,
+        isOverdue: false,
+      );
+    } else if (date.isAtSameMomentAs(tomorrow)) {
+      return _NodeRowDueDateInfo(
+        label: '明天',
+        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+        isOverdue: false,
+      );
+    } else {
+      return _NodeRowDueDateInfo(
+        label: '${date.month}月${date.day}日',
+        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+        isOverdue: false,
+      );
+    }
   }
 
   Widget _buildTrailingSlot(ThemeData theme) {
@@ -411,4 +541,16 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
       ),
     );
   }
+}
+
+class _NodeRowDueDateInfo {
+  final String label;
+  final Color color;
+  final bool isOverdue;
+
+  const _NodeRowDueDateInfo({
+    required this.label,
+    required this.color,
+    required this.isOverdue,
+  });
 }

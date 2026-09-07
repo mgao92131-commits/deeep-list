@@ -279,37 +279,36 @@ void main() {
     },
   );
 
-  testWidgets(
-    'Test D: unfocus or unregister clears handover state safely',
-    (tester) async {
-      final session = EditorSession();
-      final focusNodeA = FocusNode();
-      final controllerA = TextEditingController(text: 'Hello');
-      final focusNodeB = FocusNode();
-      final controllerB = TextEditingController(text: 'World');
+  testWidgets('Test D: unfocus or unregister clears handover state safely', (
+    tester,
+  ) async {
+    final session = EditorSession();
+    final focusNodeA = FocusNode();
+    final controllerA = TextEditingController(text: 'Hello');
+    final focusNodeB = FocusNode();
+    final controllerB = TextEditingController(text: 'World');
 
-      addTearDown(() {
-        session.dispose();
-        focusNodeA.dispose();
-        controllerA.dispose();
-        focusNodeB.dispose();
-        controllerB.dispose();
-      });
+    addTearDown(() {
+      session.dispose();
+      focusNodeA.dispose();
+      controllerA.dispose();
+      focusNodeB.dispose();
+      controllerB.dispose();
+    });
 
-      session.register(
-        nodeId: 'a',
-        focusNode: focusNodeA,
-        controller: controllerA,
-        commit: (_) async {},
-      );
+    session.register(
+      nodeId: 'a',
+      focusNode: focusNodeA,
+      controller: controllerA,
+      commit: (_) async {},
+    );
 
-      session.handoverFocus('a', 'b');
-      expect(session.isHandingOver, isTrue);
-      expect(session.handoverTarget, 'b');
+    session.handoverFocus('a', 'b');
+    expect(session.isHandingOver, isTrue);
+    expect(session.handoverTarget, 'b');
 
-      session.unfocus();
-      expect(session.isHandingOver, isFalse);
-      expect(session.handoverTarget, isNull);
-    },
-  );
+    session.unfocus();
+    expect(session.isHandingOver, isFalse);
+    expect(session.handoverTarget, isNull);
+  });
 }

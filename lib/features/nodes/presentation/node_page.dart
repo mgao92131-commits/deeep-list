@@ -17,6 +17,7 @@ import 'node_list.dart';
 import 'providers/visible_nodes_provider.dart';
 import 'widgets/keyboard_toolbar.dart';
 import 'widgets/node_action_menu.dart';
+import 'widgets/smart_entries_bar.dart';
 
 class NodePage extends ConsumerStatefulWidget {
   final NodeId? parentId;
@@ -387,6 +388,17 @@ class _NodePageState extends ConsumerState<NodePage>
 
   // Spec 12 & 14: Enter rules
   Future<void> _handleEnter(Node node, int cursor, String text) async {
+    if (node.isArchived) {
+      await _commit(node.id, text);
+      _editorSession.unfocus();
+      if (mounted) {
+        ref
+            .read(nodePageControllerProvider(widget.parentId).notifier)
+            .toNormal();
+      }
+      return;
+    }
+
     if (!_structuralCommandsInFlight.add(node.id)) return;
     _isHandlingEnter = true;
     _enterProtectionTimer?.cancel();
@@ -479,6 +491,10 @@ class _NodePageState extends ConsumerState<NodePage>
 
   // Spec 20-22: Swipe Right -> Indent
   Future<void> _handleIndent(NodeId nodeId) async {
+    if (ref.read(archiveViewProvider(widget.parentId)) ==
+        ArchiveView.archived) {
+      return;
+    }
     final isEditingThis = _editorSession.activeNodeId == nodeId;
     final text = isEditingThis ? _editorSession.activeText : null;
     if (isEditingThis && text != null && text.trim().isEmpty) {
@@ -504,6 +520,10 @@ class _NodePageState extends ConsumerState<NodePage>
 
   // Spec 23-24: Swipe Left -> Outdent
   Future<void> _handleOutdent(NodeId nodeId) async {
+    if (ref.read(archiveViewProvider(widget.parentId)) ==
+        ArchiveView.archived) {
+      return;
+    }
     final isEditingThis = _editorSession.activeNodeId == nodeId;
     final text = isEditingThis ? _editorSession.activeText : null;
     if (isEditingThis && text != null && text.trim().isEmpty) {
@@ -532,6 +552,10 @@ class _NodePageState extends ConsumerState<NodePage>
     NodeId? parentId,
     List<NodeId> orderedIds,
   ) async {
+    if (ref.read(archiveViewProvider(widget.parentId)) ==
+        ArchiveView.archived) {
+      return;
+    }
     setState(() {
       _optimisticOrder = orderedIds;
     });
@@ -553,6 +577,10 @@ class _NodePageState extends ConsumerState<NodePage>
 
   // Blank Area Click -> create transient empty node and edit seamlessly
   Future<void> _createTrailingNode() async {
+    if (ref.read(archiveViewProvider(widget.parentId)) ==
+        ArchiveView.archived) {
+      return;
+    }
     final currentEditingId = ref
         .read(nodePageControllerProvider(widget.parentId))
         .editingNodeId;
@@ -613,12 +641,13 @@ class _NodePageState extends ConsumerState<NodePage>
     ref.read(clipboardControllerProvider.notifier).copy(node.id);
   }
 
-  Future<void> _openActionMenu(Node node) async {
+  Future<void> _openActionMenu(Node node, Offset position) async {
     final clipboardNodeId = ref.read(clipboardControllerProvider);
     final canPaste = clipboardNodeId != null;
 
     await NodeActionMenu.show(
       context,
+      position: position,
       node: node,
       canPaste: canPaste,
       onCopy: () => unawaited(_copyNode(node)),
@@ -646,12 +675,6 @@ class _NodePageState extends ConsumerState<NodePage>
               }
             }
           : null,
-      onColorSelected: (color) async {
-        await _runMutation(
-          () =>
-              ref.read(treeCommandServiceProvider).updateColor(node.id, color),
-        );
-      },
       onArchive: () async {
         final currentEditingId = ref
             .read(nodePageControllerProvider(widget.parentId))
@@ -661,6 +684,22 @@ class _NodePageState extends ConsumerState<NodePage>
         }
         await _runMutation(
           () => ref.read(treeCommandServiceProvider).archiveNode(node.id),
+        );
+        if (mounted) {
+          ref
+              .read(nodePageControllerProvider(widget.parentId).notifier)
+              .toNormal();
+        }
+      },
+      onRestore: () async {
+        final currentEditingId = ref
+            .read(nodePageControllerProvider(widget.parentId))
+            .editingNodeId;
+        if (currentEditingId != null) {
+          await _finishActiveEditing(discardIfEmpty: false);
+        }
+        await _runMutation(
+          () => ref.read(treeCommandServiceProvider).restoreNode(node.id),
         );
         if (mounted) {
           ref
@@ -719,13 +758,30 @@ class _NodePageState extends ConsumerState<NodePage>
   Widget build(BuildContext context) {
     final nodesAsync = ref.watch(visibleNodesProvider(widget.parentId));
     final pageState = ref.watch(nodePageControllerProvider(widget.parentId));
+    final archiveView = ref.watch(archiveViewProvider(widget.parentId));
+    final archivedCount = ref.watch(archivedCountProvider(widget.parentId));
     final parent = widget.parentId == null
         ? null
         : ref.watch(nodeProvider(widget.parentId!)).value;
 
     final isNormal = pageState.isNormal;
-
     final isRoot = widget.parentId == null;
+
+    ref.listen<int>(archivedCountProvider(widget.parentId), (previous, next) {
+      if (next == 0) {
+        final currentView = ref.read(archiveViewProvider(widget.parentId));
+        if (currentView == ArchiveView.archived) {
+          ref
+              .read(archiveViewProvider(widget.parentId).notifier)
+              .setView(ArchiveView.active);
+        }
+      }
+    });
+
+    final baseTitle = isRoot ? 'DeepList' : parent?.content ?? '';
+    final displayTitle = archiveView == ArchiveView.archived
+        ? '$baseTitle · 已归档'
+        : baseTitle;
 
     return PopScope<void>(
       canPop: isNormal,
@@ -746,11 +802,54 @@ class _NodePageState extends ConsumerState<NodePage>
                   onPressed: () => unawaited(_handleBack()),
                 ),
           title: Text(
-            isRoot ? 'DeepList' : parent?.content ?? '',
+            displayTitle,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
           ),
+          actions: [
+            if (archivedCount > 0 || archiveView == ArchiveView.archived)
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert),
+                tooltip: '更多',
+                onSelected: (value) {
+                  if (value == 'toggle_archive') {
+                    ref
+                        .read(archiveViewProvider(widget.parentId).notifier)
+                        .toggle();
+                  }
+                },
+                itemBuilder: (context) {
+                  if (archiveView == ArchiveView.active) {
+                    return [
+                      const PopupMenuItem(
+                        value: 'toggle_archive',
+                        child: Row(
+                          children: [
+                            Icon(Icons.archive_outlined, size: 20),
+                            SizedBox(width: 12),
+                            Text('查看已归档'),
+                          ],
+                        ),
+                      ),
+                    ];
+                  } else {
+                    return [
+                      const PopupMenuItem(
+                        value: 'toggle_archive',
+                        child: Row(
+                          children: [
+                            Icon(Icons.unarchive_outlined, size: 20),
+                            SizedBox(width: 12),
+                            Text('查看未归档'),
+                          ],
+                        ),
+                      ),
+                    ];
+                  }
+                },
+              ),
+          ],
         ),
         body: nodesAsync.when(
           data: (items) {
@@ -789,20 +888,33 @@ class _NodePageState extends ConsumerState<NodePage>
                 ? displayItems.findItem(pageState.editingNodeId!)
                 : null;
 
+            final showSmartEntries =
+                isRoot && archiveView == ArchiveView.active;
+
             return Column(
               children: [
+                if (showSmartEntries)
+                  SmartEntriesBar(
+                    onTodayTap: () => context.push('/today'),
+                    onFavoritesTap: () => context.push('/favorites'),
+                    onDueDatesTap: () => context.push('/due-dates'),
+                  ),
                 Expanded(
                   child: NodeList(
                     items: displayItems,
                     parentId: widget.parentId,
+                    isArchivedView: archiveView == ArchiveView.archived,
                     editingNodeId: pageState.editingNodeId,
                     editorSession: _editorSession,
-                    onLongPress: (node) => unawaited(_openActionMenu(node)),
+                    onLongPress: (node, position) =>
+                        unawaited(_openActionMenu(node, position)),
                     onStartEditing: _startEditing,
                     onCommit: _commit,
                     onChanged: (node, text) => _scheduleAutosave(node.id, text),
                     onBlur: (text) {
-                      if (_isHandlingEnter || _editorSession.isHandingOver) return;
+                      if (_isHandlingEnter || _editorSession.isHandingOver) {
+                        return;
+                      }
                       if (text.trim().isEmpty) {
                         unawaited(_finishActiveEditing(discardIfEmpty: true));
                       }
@@ -841,10 +953,9 @@ class _NodePageState extends ConsumerState<NodePage>
                   KeyboardToolbar(
                     activeNodeId: activeItem.id,
                     currentColor: activeItem.node.color,
-                    canOutdent: activeItem.canOutdent,
-                    canIndent: activeItem.canIndent,
-                    onOutdent: () => unawaited(_handleOutdent(activeItem.id)),
-                    onIndent: () => unawaited(_handleIndent(activeItem.id)),
+                    isDone: activeItem.isDone,
+                    isFavorite: activeItem.node.isFavorite,
+                    dueDate: activeItem.node.dueDate,
                     onColorSelected: (color) {
                       unawaited(
                         _runMutation(
@@ -854,9 +965,32 @@ class _NodePageState extends ConsumerState<NodePage>
                         ),
                       );
                     },
-                    onMore: () => unawaited(_openActionMenu(activeItem.node)),
-                    onDone: () async {
-                      await _finishActiveEditing(discardIfEmpty: true);
+                    onToggleDone: () {
+                      unawaited(
+                        _runMutation(
+                          () => ref
+                              .read(treeCommandServiceProvider)
+                              .toggleDone(activeItem.id),
+                        ),
+                      );
+                    },
+                    onToggleFavorite: () {
+                      unawaited(
+                        _runMutation(
+                          () => ref
+                              .read(treeCommandServiceProvider)
+                              .toggleFavorite(activeItem.id),
+                        ),
+                      );
+                    },
+                    onDueDateChanged: (date) {
+                      unawaited(
+                        _runMutation(
+                          () => ref
+                              .read(treeCommandServiceProvider)
+                              .updateDueDate(activeItem.id, date),
+                        ),
+                      );
                     },
                   ),
               ],

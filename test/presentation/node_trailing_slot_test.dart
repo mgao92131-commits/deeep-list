@@ -48,10 +48,7 @@ void main() {
         content: 'Parent',
       );
       for (var i = 1; i <= 3; i++) {
-        await commands.createNode(
-          parentId: parent.id,
-          content: 'Child $i',
-        );
+        await commands.createNode(parentId: parent.id, content: 'Child $i');
       }
 
       await pumpApp(tester);

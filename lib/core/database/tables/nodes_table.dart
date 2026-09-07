@@ -27,6 +27,8 @@ class Nodes extends Table {
   TextColumn get color =>
       textEnum<NodeColor>().withDefault(const Constant('none'))();
 
+  DateTimeColumn get dueDate => dateTime().nullable()();
+
   DateTimeColumn get createdAt => dateTime()();
 
   DateTimeColumn get updatedAt => dateTime()();

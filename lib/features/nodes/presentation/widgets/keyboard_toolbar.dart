@@ -6,25 +6,25 @@ import '../../domain/node_id.dart';
 class KeyboardToolbar extends StatefulWidget {
   final NodeId? activeNodeId;
   final NodeColor currentColor;
-  final bool canOutdent;
-  final bool canIndent;
-  final VoidCallback onOutdent;
-  final VoidCallback onIndent;
+  final bool isDone;
+  final bool isFavorite;
+  final DateTime? dueDate;
   final ValueChanged<NodeColor>? onColorSelected;
-  final VoidCallback onDone;
-  final VoidCallback? onMore;
+  final VoidCallback? onToggleDone;
+  final VoidCallback? onToggleFavorite;
+  final ValueChanged<DateTime?>? onDueDateChanged;
 
   const KeyboardToolbar({
     super.key,
     this.activeNodeId,
     this.currentColor = NodeColor.none,
-    required this.canOutdent,
-    required this.canIndent,
-    required this.onOutdent,
-    required this.onIndent,
+    this.isDone = false,
+    this.isFavorite = false,
+    this.dueDate,
     this.onColorSelected,
-    required this.onDone,
-    this.onMore,
+    this.onToggleDone,
+    this.onToggleFavorite,
+    this.onDueDateChanged,
   });
 
   @override
@@ -83,31 +83,7 @@ class _KeyboardToolbarState extends State<KeyboardToolbar> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          // ⇤ Outdent button
-          Focus(
-            canRequestFocus: false,
-            skipTraversal: true,
-            child: IconButton(
-              icon: const Icon(Icons.format_indent_decrease, size: 20),
-              tooltip: 'Outdent',
-              onPressed: widget.canOutdent ? widget.onOutdent : null,
-              visualDensity: VisualDensity.compact,
-            ),
-          ),
-          const SizedBox(width: 8),
-          // ⇥ Indent button
-          Focus(
-            canRequestFocus: false,
-            skipTraversal: true,
-            child: IconButton(
-              icon: const Icon(Icons.format_indent_increase, size: 20),
-              tooltip: 'Indent',
-              onPressed: widget.canIndent ? widget.onIndent : null,
-              visualDensity: VisualDensity.compact,
-            ),
-          ),
-          if (widget.onColorSelected != null) ...[
-            const SizedBox(width: 8),
+          if (widget.onColorSelected != null)
             // 🎨 Color mode entry button
             Focus(
               canRequestFocus: false,
@@ -121,41 +97,233 @@ class _KeyboardToolbarState extends State<KeyboardToolbar> {
                 visualDensity: VisualDensity.compact,
               ),
             ),
-          ],
-          if (widget.onMore != null) ...[
-            const SizedBox(width: 8),
+          if (widget.onToggleFavorite != null)
+            // ★ Favorite toggle button
             Focus(
               canRequestFocus: false,
               skipTraversal: true,
               child: IconButton(
-                icon: const Icon(Icons.more_horiz, size: 20),
-                tooltip: '更多',
-                onPressed: widget.onMore,
+                icon: Icon(
+                  widget.isFavorite ? Icons.star : Icons.star_outline,
+                  size: 22,
+                  color: widget.isFavorite
+                      ? const Color(0xFFF59E0B)
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+                tooltip: widget.isFavorite ? '取消收藏' : '收藏',
+                onPressed: widget.onToggleFavorite,
                 visualDensity: VisualDensity.compact,
               ),
             ),
-          ],
+          if (widget.onDueDateChanged != null)
+            // 📅 Due date quick menu button
+            _buildDueDateButton(context, theme),
           const Spacer(),
-          // 完成 (Done) button
+          // 完成 (Done) toggle icon button
           Focus(
             canRequestFocus: false,
             skipTraversal: true,
-            child: TextButton(
-              onPressed: widget.onDone,
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: IconButton(
+              icon: Icon(
+                widget.isDone ? Icons.check_circle : Icons.check_circle_outline,
+                size: 22,
+                color: widget.isDone
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurfaceVariant,
               ),
-              child: Text(
-                '完成',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
+              tooltip: widget.isDone ? '取消完成' : '完成',
+              onPressed: widget.onToggleDone,
+              visualDensity: VisualDensity.compact,
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDueDateButton(BuildContext context, ThemeData theme) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final daysUntilNextMonday =
+        today.weekday == DateTime.monday ? 7 : (8 - today.weekday);
+    final nextMonday = today.add(Duration(days: daysUntilNextMonday));
+
+    final hasDueDate = widget.dueDate != null;
+    final currentDueDate = widget.dueDate != null
+        ? DateTime(
+            widget.dueDate!.year,
+            widget.dueDate!.month,
+            widget.dueDate!.day,
+          )
+        : null;
+
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      child: PopupMenuButton<String>(
+        tooltip: '截止日期',
+        icon: Icon(
+          hasDueDate ? Icons.event : Icons.event_outlined,
+          size: 20,
+          color: hasDueDate
+              ? theme.colorScheme.primary
+              : theme.colorScheme.onSurfaceVariant,
+        ),
+        position: PopupMenuPosition.over,
+        onSelected: (action) async {
+          if (action == 'today') {
+            widget.onDueDateChanged?.call(today);
+          } else if (action == 'tomorrow') {
+            widget.onDueDateChanged?.call(tomorrow);
+          } else if (action == 'next_monday') {
+            widget.onDueDateChanged?.call(nextMonday);
+          } else if (action == 'remove') {
+            widget.onDueDateChanged?.call(null);
+          } else if (action == 'custom') {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: currentDueDate ?? today,
+              firstDate: DateTime(2000),
+              lastDate: DateTime(2100),
+            );
+            if (picked != null) {
+              widget.onDueDateChanged?.call(
+                DateTime(picked.year, picked.month, picked.day),
+              );
+            }
+          }
+        },
+        itemBuilder: (context) {
+          final items = <PopupMenuEntry<String>>[];
+
+          if (hasDueDate && currentDueDate != null) {
+            final isToday = currentDueDate.isAtSameMomentAs(today);
+            final isTomorrow = currentDueDate.isAtSameMomentAs(tomorrow);
+            final isPast = currentDueDate.isBefore(today);
+            String curDesc;
+            if (isToday) {
+              curDesc = '今天 (${currentDueDate.month}月${currentDueDate.day}日)';
+            } else if (isTomorrow) {
+              curDesc = '明天 (${currentDueDate.month}月${currentDueDate.day}日)';
+            } else if (isPast) {
+              curDesc =
+                  '${currentDueDate.month}月${currentDueDate.day}日 (已逾期)';
+            } else {
+              curDesc = '${currentDueDate.month}月${currentDueDate.day}日';
+            }
+            items.add(
+              PopupMenuItem<String>(
+                enabled: false,
+                height: 36,
+                child: Text(
+                  '当前截止：$curDesc',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isPast
+                        ? theme.colorScheme.error
+                        : theme.colorScheme.primary,
+                  ),
+                ),
+              ),
+            );
+            items.add(const PopupMenuDivider());
+          }
+
+          items.addAll([
+            PopupMenuItem<String>(
+              value: 'today',
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('今天'),
+                  Text(
+                    '${today.month}月${today.day}日',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: theme.colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.7,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            PopupMenuItem<String>(
+              value: 'tomorrow',
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('明天'),
+                  Text(
+                    '${tomorrow.month}月${tomorrow.day}日',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: theme.colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.7,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            PopupMenuItem<String>(
+              value: 'next_monday',
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('下周一'),
+                  Text(
+                    '${nextMonday.month}月${nextMonday.day}日',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: theme.colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.7,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const PopupMenuDivider(),
+            const PopupMenuItem<String>(
+              value: 'custom',
+              child: Row(
+                children: [
+                  Icon(Icons.edit_calendar_outlined, size: 18),
+                  SizedBox(width: 8),
+                  Text('选择日期…'),
+                ],
+              ),
+            ),
+          ]);
+
+          if (hasDueDate) {
+            items.add(const PopupMenuDivider());
+            items.add(
+              PopupMenuItem<String>(
+                value: 'remove',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.event_busy_outlined,
+                      size: 18,
+                      color: theme.colorScheme.error,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '移除截止日期',
+                      style: TextStyle(color: theme.colorScheme.error),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          return items;
+        },
       ),
     );
   }

@@ -115,6 +115,17 @@ class $NodesTable extends Nodes with TableInfo<$NodesTable, Node> {
         requiredDuringInsert: false,
         defaultValue: const Constant('none'),
       ).withConverter<NodeColor>($NodesTable.$convertercolor);
+  static const VerificationMeta _dueDateMeta = const VerificationMeta(
+    'dueDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> dueDate = GeneratedColumn<DateTime>(
+    'due_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -148,6 +159,7 @@ class $NodesTable extends Nodes with TableInfo<$NodesTable, Node> {
     isFavorite,
     isArchived,
     color,
+    dueDate,
     createdAt,
     updatedAt,
   ];
@@ -214,6 +226,12 @@ class $NodesTable extends Nodes with TableInfo<$NodesTable, Node> {
         isArchived.isAcceptableOrUnknown(data['is_archived']!, _isArchivedMeta),
       );
     }
+    if (data.containsKey('due_date')) {
+      context.handle(
+        _dueDateMeta,
+        dueDate.isAcceptableOrUnknown(data['due_date']!, _dueDateMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -277,6 +295,10 @@ class $NodesTable extends Nodes with TableInfo<$NodesTable, Node> {
           data['${effectivePrefix}color'],
         )!,
       ),
+      dueDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}due_date'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -307,6 +329,7 @@ class Node extends DataClass implements Insertable<Node> {
   final bool isFavorite;
   final bool isArchived;
   final NodeColor color;
+  final DateTime? dueDate;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Node({
@@ -319,6 +342,7 @@ class Node extends DataClass implements Insertable<Node> {
     required this.isFavorite,
     required this.isArchived,
     required this.color,
+    this.dueDate,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -340,6 +364,9 @@ class Node extends DataClass implements Insertable<Node> {
     {
       map['color'] = Variable<String>($NodesTable.$convertercolor.toSql(color));
     }
+    if (!nullToAbsent || dueDate != null) {
+      map['due_date'] = Variable<DateTime>(dueDate);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -358,6 +385,9 @@ class Node extends DataClass implements Insertable<Node> {
       isFavorite: Value(isFavorite),
       isArchived: Value(isArchived),
       color: Value(color),
+      dueDate: dueDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dueDate),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -380,6 +410,7 @@ class Node extends DataClass implements Insertable<Node> {
       color: $NodesTable.$convertercolor.fromJson(
         serializer.fromJson<String>(json['color']),
       ),
+      dueDate: serializer.fromJson<DateTime?>(json['dueDate']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -399,6 +430,7 @@ class Node extends DataClass implements Insertable<Node> {
       'color': serializer.toJson<String>(
         $NodesTable.$convertercolor.toJson(color),
       ),
+      'dueDate': serializer.toJson<DateTime?>(dueDate),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -414,6 +446,7 @@ class Node extends DataClass implements Insertable<Node> {
     bool? isFavorite,
     bool? isArchived,
     NodeColor? color,
+    Value<DateTime?> dueDate = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Node(
@@ -426,6 +459,7 @@ class Node extends DataClass implements Insertable<Node> {
     isFavorite: isFavorite ?? this.isFavorite,
     isArchived: isArchived ?? this.isArchived,
     color: color ?? this.color,
+    dueDate: dueDate.present ? dueDate.value : this.dueDate,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -444,6 +478,7 @@ class Node extends DataClass implements Insertable<Node> {
           ? data.isArchived.value
           : this.isArchived,
       color: data.color.present ? data.color.value : this.color,
+      dueDate: data.dueDate.present ? data.dueDate.value : this.dueDate,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -461,6 +496,7 @@ class Node extends DataClass implements Insertable<Node> {
           ..write('isFavorite: $isFavorite, ')
           ..write('isArchived: $isArchived, ')
           ..write('color: $color, ')
+          ..write('dueDate: $dueDate, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -478,6 +514,7 @@ class Node extends DataClass implements Insertable<Node> {
     isFavorite,
     isArchived,
     color,
+    dueDate,
     createdAt,
     updatedAt,
   );
@@ -494,6 +531,7 @@ class Node extends DataClass implements Insertable<Node> {
           other.isFavorite == this.isFavorite &&
           other.isArchived == this.isArchived &&
           other.color == this.color &&
+          other.dueDate == this.dueDate &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -508,6 +546,7 @@ class NodesCompanion extends UpdateCompanion<Node> {
   final Value<bool> isFavorite;
   final Value<bool> isArchived;
   final Value<NodeColor> color;
+  final Value<DateTime?> dueDate;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -521,6 +560,7 @@ class NodesCompanion extends UpdateCompanion<Node> {
     this.isFavorite = const Value.absent(),
     this.isArchived = const Value.absent(),
     this.color = const Value.absent(),
+    this.dueDate = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -535,6 +575,7 @@ class NodesCompanion extends UpdateCompanion<Node> {
     this.isFavorite = const Value.absent(),
     this.isArchived = const Value.absent(),
     this.color = const Value.absent(),
+    this.dueDate = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -553,6 +594,7 @@ class NodesCompanion extends UpdateCompanion<Node> {
     Expression<bool>? isFavorite,
     Expression<bool>? isArchived,
     Expression<String>? color,
+    Expression<DateTime>? dueDate,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -567,6 +609,7 @@ class NodesCompanion extends UpdateCompanion<Node> {
       if (isFavorite != null) 'is_favorite': isFavorite,
       if (isArchived != null) 'is_archived': isArchived,
       if (color != null) 'color': color,
+      if (dueDate != null) 'due_date': dueDate,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -583,6 +626,7 @@ class NodesCompanion extends UpdateCompanion<Node> {
     Value<bool>? isFavorite,
     Value<bool>? isArchived,
     Value<NodeColor>? color,
+    Value<DateTime?>? dueDate,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -597,6 +641,7 @@ class NodesCompanion extends UpdateCompanion<Node> {
       isFavorite: isFavorite ?? this.isFavorite,
       isArchived: isArchived ?? this.isArchived,
       color: color ?? this.color,
+      dueDate: dueDate ?? this.dueDate,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -635,6 +680,9 @@ class NodesCompanion extends UpdateCompanion<Node> {
         $NodesTable.$convertercolor.toSql(color.value),
       );
     }
+    if (dueDate.present) {
+      map['due_date'] = Variable<DateTime>(dueDate.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -659,6 +707,7 @@ class NodesCompanion extends UpdateCompanion<Node> {
           ..write('isFavorite: $isFavorite, ')
           ..write('isArchived: $isArchived, ')
           ..write('color: $color, ')
+          ..write('dueDate: $dueDate, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -701,6 +750,7 @@ typedef $$NodesTableCreateCompanionBuilder =
       Value<bool> isFavorite,
       Value<bool> isArchived,
       Value<NodeColor> color,
+      Value<DateTime?> dueDate,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -716,6 +766,7 @@ typedef $$NodesTableUpdateCompanionBuilder =
       Value<bool> isFavorite,
       Value<bool> isArchived,
       Value<NodeColor> color,
+      Value<DateTime?> dueDate,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -792,6 +843,11 @@ class $$NodesTableFilterComposer extends Composer<_$AppDatabase, $NodesTable> {
         column: $table.color,
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
+
+  ColumnFilters<DateTime> get dueDate => $composableBuilder(
+    column: $table.dueDate,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
@@ -876,6 +932,11 @@ class $$NodesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get dueDate => $composableBuilder(
+    column: $table.dueDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -947,6 +1008,9 @@ class $$NodesTableAnnotationComposer
   GeneratedColumnWithTypeConverter<NodeColor, String> get color =>
       $composableBuilder(column: $table.color, builder: (column) => column);
 
+  GeneratedColumn<DateTime> get dueDate =>
+      $composableBuilder(column: $table.dueDate, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -1014,6 +1078,7 @@ class $$NodesTableTableManager
                 Value<bool> isFavorite = const Value.absent(),
                 Value<bool> isArchived = const Value.absent(),
                 Value<NodeColor> color = const Value.absent(),
+                Value<DateTime?> dueDate = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -1027,6 +1092,7 @@ class $$NodesTableTableManager
                 isFavorite: isFavorite,
                 isArchived: isArchived,
                 color: color,
+                dueDate: dueDate,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -1042,6 +1108,7 @@ class $$NodesTableTableManager
                 Value<bool> isFavorite = const Value.absent(),
                 Value<bool> isArchived = const Value.absent(),
                 Value<NodeColor> color = const Value.absent(),
+                Value<DateTime?> dueDate = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -1055,6 +1122,7 @@ class $$NodesTableTableManager
                 isFavorite: isFavorite,
                 isArchived: isArchived,
                 color: color,
+                dueDate: dueDate,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,

@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../features/nodes/presentation/node_page.dart';
+import '../features/nodes/presentation/providers/smart_nodes_provider.dart';
+import '../features/nodes/presentation/smart_node_page.dart';
 
 part 'router.g.dart';
 
@@ -22,6 +24,21 @@ GoRouter router(Ref ref) {
             builder: (context, state) {
               return NodePage(parentId: state.pathParameters['nodeId']!);
             },
+          ),
+          GoRoute(
+            path: 'today',
+            builder: (context, state) =>
+                const SmartNodePage(type: SmartListType.today),
+          ),
+          GoRoute(
+            path: 'favorites',
+            builder: (context, state) =>
+                const SmartNodePage(type: SmartListType.favorites),
+          ),
+          GoRoute(
+            path: 'due-dates',
+            builder: (context, state) =>
+                const SmartNodePage(type: SmartListType.dueDates),
           ),
         ],
       ),

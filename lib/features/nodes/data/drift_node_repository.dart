@@ -72,6 +72,52 @@ class DriftNodeRepository implements TreeMutationRepository {
   }
 
   @override
+  Stream<List<domain.Node>> watchFavorites() {
+    final query = database.select(database.nodes)
+      ..where((table) =>
+          table.isFavorite.equals(true) &
+          table.isDone.equals(false) &
+          table.isArchived.equals(false))
+      ..orderBy([
+        (table) => OrderingTerm(expression: table.updatedAt, mode: OrderingMode.desc),
+        (table) => OrderingTerm(expression: table.id),
+      ]);
+    return query.watch().map((rows) => rows.map(_toDomain).toList(growable: false));
+  }
+
+  @override
+  Stream<List<domain.Node>> watchDueNodes() {
+    final query = database.select(database.nodes)
+      ..where((table) =>
+          table.dueDate.isNotNull() &
+          table.isDone.equals(false) &
+          table.isArchived.equals(false))
+      ..orderBy([
+        (table) => OrderingTerm(expression: table.dueDate, mode: OrderingMode.asc),
+        (table) => OrderingTerm(expression: table.position),
+        (table) => OrderingTerm(expression: table.id),
+      ]);
+    return query.watch().map((rows) => rows.map(_toDomain).toList(growable: false));
+  }
+
+  @override
+  Future<List<domain.Node>> getAncestors(NodeId nodeId) async {
+    final ancestors = <domain.Node>[];
+    final visited = <NodeId>{nodeId};
+    var currentId = nodeId;
+    while (true) {
+      final node = await getNode(currentId);
+      if (node == null || node.parentId == null) break;
+      if (!visited.add(node.parentId!)) break;
+      final parent = await getNode(node.parentId!);
+      if (parent == null) break;
+      ancestors.insert(0, parent);
+      currentId = parent.id;
+    }
+    return ancestors;
+  }
+
+  @override
   Future<T> transaction<T>(TreeTransactionAction<T> action) {
     return database.transaction(
       () => action(_DriftNodeRepositoryTransaction(database)),
@@ -114,6 +160,7 @@ class DriftNodeRepository implements TreeMutationRepository {
       isFavorite: row.isFavorite,
       isArchived: row.isArchived,
       color: row.color,
+      dueDate: row.dueDate,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     );
@@ -184,6 +231,7 @@ class _DriftNodeRepositoryTransaction implements TreeTransaction {
       isFavorite: row.isFavorite,
       isArchived: row.isArchived,
       color: row.color,
+      dueDate: row.dueDate,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     );
@@ -200,6 +248,7 @@ class _DriftNodeRepositoryTransaction implements TreeTransaction {
       isFavorite: Value(node.isFavorite),
       isArchived: Value(node.isArchived),
       color: Value(node.color),
+      dueDate: Value(domain.Node.normalizeDate(node.dueDate)),
       createdAt: node.createdAt,
       updatedAt: node.updatedAt,
     );
