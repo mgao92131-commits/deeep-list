@@ -9,6 +9,7 @@ import 'package:deep_list/features/nodes/application/tree_command_service.dart';
 import 'package:deep_list/features/nodes/presentation/smart_node_page.dart';
 import 'package:deep_list/features/nodes/presentation/widgets/keyboard_toolbar.dart';
 import 'package:deep_list/features/nodes/presentation/widgets/smart_entries_bar.dart';
+import 'package:deep_list/features/nodes/presentation/widgets/node_row.dart';
 
 import '../helpers/memory_node_repository.dart';
 
@@ -41,6 +42,58 @@ void main() {
       );
       await tester.pumpAndSettle();
     }
+
+    testWidgets('入口保持等宽、彩色图标、零数量和 Tooltip，无文字标签', (tester) async {
+      await pumpApp(tester);
+      final bar = find.byType(SmartEntriesBar);
+      expect(
+        find.descendant(of: bar, matching: find.text('0')),
+        findsNWidgets(3),
+      );
+      for (final label in ['今天', '收藏', '截止日期']) {
+        expect(find.byTooltip(label), findsOneWidget);
+        expect(find.text(label), findsNothing);
+      }
+      final icons = {
+        'today': Icons.wb_sunny_outlined,
+        'favorites': Icons.star,
+        'due-dates': Icons.event_outlined,
+      };
+      for (final entry in icons.entries) {
+        final icon = tester.widget<Icon>(
+          find.byKey(ValueKey('smart-entry-${entry.key}')),
+        );
+        expect(icon.icon, entry.value);
+        expect(icon.size, 22);
+        if (entry.key != 'due-dates') {
+          expect(icon.color, const Color(0xFFF59E0B));
+        }
+      }
+      final buttons = find.descendant(of: bar, matching: find.byType(InkWell));
+      expect(buttons, findsNWidgets(3));
+      expect(tester.getSize(buttons.at(0)), tester.getSize(buttons.at(1)));
+      expect(tester.getSize(buttons.at(1)), tester.getSize(buttons.at(2)));
+    });
+
+    testWidgets('数量 99 原样显示，100 显示 99+', (tester) async {
+      for (var i = 0; i < 99; i++) {
+        final node = await commands.createNode(
+          parentId: null,
+          content: 'Item $i',
+        );
+        await commands.toggleFavorite(node.id);
+      }
+      await pumpApp(tester);
+      final count = find.byKey(const ValueKey('smart-entry-favorites-count'));
+      expect(tester.widget<Text>(count).data, '99');
+      final node = await commands.createNode(
+        parentId: null,
+        content: 'Item 100',
+      );
+      await commands.toggleFavorite(node.id);
+      await tester.pumpAndSettle();
+      expect(tester.widget<Text>(count).data, '99+');
+    });
 
     testWidgets('三个智能入口只在最顶层主页出现，普通子节点页面不出现', (tester) async {
       final parent = await commands.createNode(
@@ -128,7 +181,13 @@ void main() {
       await pumpApp(tester);
 
       // Fav Item 显示实心金星
-      expect(find.byIcon(Icons.star), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(NodeRow),
+          matching: find.byIcon(Icons.star),
+        ),
+        findsOneWidget,
+      );
       // 未收藏节点不显示空星
       expect(find.text('☆'), findsNothing);
 
@@ -142,7 +201,13 @@ void main() {
       // 取消收藏后，实心星消失，但文本依然稳定
       await commands.toggleFavorite(p1.id);
       await tester.pumpAndSettle();
-      expect(find.byIcon(Icons.star), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(NodeRow),
+          matching: find.byIcon(Icons.star),
+        ),
+        findsNothing,
+      );
       expect(tester.getTopLeft(find.text('Fav Item')).dx, normalLeft);
       expect(tester.getCenter(find.text('2')), trailingPosition);
     });

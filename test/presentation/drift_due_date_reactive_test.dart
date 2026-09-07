@@ -39,6 +39,84 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
+    testWidgets('主页数量与智能列表一致，覆盖子节点、逾期、完成和归档', (tester) async {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final parent = await harness.commands.createNode(
+        parentId: null,
+        content: 'Parent',
+      );
+      final overdue = await harness.commands.createNode(
+        parentId: parent.id,
+        content: 'Overdue',
+      );
+      final future = await harness.commands.createNode(
+        parentId: null,
+        content: 'Future',
+      );
+      final done = await harness.commands.createNode(
+        parentId: null,
+        content: 'Done',
+      );
+      final archived = await harness.commands.createNode(
+        parentId: null,
+        content: 'Archived',
+      );
+      for (final node in [parent, overdue, future, done, archived]) {
+        await harness.commands.updateDueDate(node.id, today);
+        await harness.commands.toggleFavorite(node.id);
+      }
+      await harness.commands.updateDueDate(
+        overdue.id,
+        today.subtract(const Duration(days: 1)),
+      );
+      await harness.commands.updateDueDate(
+        future.id,
+        today.add(const Duration(days: 3)),
+      );
+      await harness.commands.toggleDone(done.id);
+      await harness.commands.archiveNode(archived.id);
+      await pumpApp(tester);
+      for (final entry in {
+        'today': 2,
+        'favorites': 3,
+        'due-dates': 3,
+      }.entries) {
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(ValueKey('smart-entry-${entry.key}-count')),
+              )
+              .data,
+          '${entry.value}',
+        );
+        await tester.tap(find.byKey(ValueKey('smart-entry-${entry.key}')));
+        await tester.pumpAndSettle();
+        expect(find.byType(NodeRow), findsNWidgets(entry.value));
+        await tester.tap(find.byTooltip('Back'));
+        await tester.pumpAndSettle();
+      }
+      await harness.commands.toggleDone(parent.id);
+      await harness.commands.toggleFavorite(future.id);
+      await harness.commands.updateDueDate(overdue.id, null);
+      await tester.pumpAndSettle();
+      for (final entry in {
+        'today': 0,
+        'favorites': 1,
+        'due-dates': 1,
+      }.entries) {
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(ValueKey('smart-entry-${entry.key}-count')),
+              )
+              .data,
+          '${entry.value}',
+        );
+      }
+      await tearDownApp(tester);
+    });
+
     for (final entry in ['today', 'favorites', 'due-dates']) {
       testWidgets('$entry 完成提示并撤销通过 Drift 自动恢复节点', (tester) async {
         final node = await harness.commands.createNode(

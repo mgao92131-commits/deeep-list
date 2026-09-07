@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class SmartEntriesBar extends StatelessWidget {
+import '../providers/smart_nodes_provider.dart';
+
+class SmartEntriesBar extends ConsumerWidget {
   final VoidCallback onTodayTap;
   final VoidCallback onFavoritesTap;
   final VoidCallback onDueDatesTap;
@@ -13,9 +16,14 @@ class SmartEntriesBar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final iconColor = theme.colorScheme.onSurfaceVariant;
+    int count(SmartListType type) =>
+        ref
+            .watch(smartNodesProvider(type))
+            .value
+            ?.fold<int>(0, (total, group) => total + group.items.length) ??
+        0;
 
     return Container(
       height: 48,
@@ -38,11 +46,12 @@ class SmartEntriesBar extends StatelessWidget {
                 ),
                 onTap: onTodayTap,
                 child: Center(
-                  child: Icon(
-                    Icons.today_outlined,
-                    key: const ValueKey('smart-entry-today'),
-                    color: iconColor,
-                    size: 22,
+                  child: _entryContent(
+                    context,
+                    icon: Icons.wb_sunny_outlined,
+                    entry: 'today',
+                    color: const Color(0xFFF59E0B),
+                    count: count(SmartListType.today),
                   ),
                 ),
               ),
@@ -61,11 +70,12 @@ class SmartEntriesBar extends StatelessWidget {
               child: InkWell(
                 onTap: onFavoritesTap,
                 child: Center(
-                  child: Icon(
-                    Icons.star_outline,
-                    key: const ValueKey('smart-entry-favorites'),
-                    color: iconColor,
-                    size: 22,
+                  child: _entryContent(
+                    context,
+                    icon: Icons.star,
+                    entry: 'favorites',
+                    color: const Color(0xFFF59E0B),
+                    count: count(SmartListType.favorites),
                   ),
                 ),
               ),
@@ -87,11 +97,12 @@ class SmartEntriesBar extends StatelessWidget {
                 ),
                 onTap: onDueDatesTap,
                 child: Center(
-                  child: Icon(
-                    Icons.event_outlined,
-                    key: const ValueKey('smart-entry-due-dates'),
-                    color: iconColor,
-                    size: 22,
+                  child: _entryContent(
+                    context,
+                    icon: Icons.event_outlined,
+                    entry: 'due-dates',
+                    color: theme.colorScheme.primary,
+                    count: count(SmartListType.dueDates),
                   ),
                 ),
               ),
@@ -101,4 +112,28 @@ class SmartEntriesBar extends StatelessWidget {
       ),
     );
   }
+
+  Widget _entryContent(
+    BuildContext context, {
+    required IconData icon,
+    required String entry,
+    required Color color,
+    required int count,
+  }) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, key: ValueKey('smart-entry-$entry'), color: color, size: 22),
+      const SizedBox(width: 6),
+      Text(
+        count > 99 ? '99+' : '$count',
+        key: ValueKey('smart-entry-$entry-count'),
+        semanticsLabel: '$count',
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    ],
+  );
 }
