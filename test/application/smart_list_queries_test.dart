@@ -38,6 +38,7 @@ void main() {
     Future<List<SmartNodeGroup>> readGroups(SmartListType type) async {
       final sub = container.listen(smartNodesProvider(type), (_, _) {});
       try {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
         return await container.read(smartNodesProvider(type).future);
       } finally {
         sub.close();
@@ -52,10 +53,7 @@ void main() {
         );
         await commands.toggleFavorite(favActive.id);
 
-        await commands.createNode(
-          parentId: null,
-          content: 'Normal Active',
-        );
+        await commands.createNode(parentId: null, content: 'Normal Active');
 
         final favDone = await commands.createNode(
           parentId: null,
@@ -79,6 +77,51 @@ void main() {
         expect(items.map((it) => it.content), isNot(contains('Fav Done')));
         expect(items.map((it) => it.content), isNot(contains('Fav Archived')));
       });
+
+      test(
+        '验证收藏列表排序基于 createdAt 升序且稳定，更新 content 或 updatedAt 不会导致自跳顶',
+        () async {
+          final f1 = await commands.createNode(
+            parentId: null,
+            content: 'First Fav',
+          );
+          await commands.toggleFavorite(f1.id);
+          await Future<void>.delayed(const Duration(milliseconds: 15));
+
+          final f2 = await commands.createNode(
+            parentId: null,
+            content: 'Second Fav',
+          );
+          await commands.toggleFavorite(f2.id);
+          await Future<void>.delayed(const Duration(milliseconds: 15));
+
+          final f3 = await commands.createNode(
+            parentId: null,
+            content: 'Third Fav',
+          );
+          await commands.toggleFavorite(f3.id);
+
+          var groups = await readGroups(SmartListType.favorites);
+          var items = groups.single.items;
+          expect(items.map((it) => it.content).toList(), [
+            'First Fav',
+            'Second Fav',
+            'Third Fav',
+          ]);
+
+          // 编辑更新 f2 (中间节点)，改变其 updatedAt
+          await commands.updateContent(f2.id, 'Second Fav Updated');
+
+          groups = await readGroups(SmartListType.favorites);
+          items = groups.single.items;
+          // 验证顺序依然稳定，不会发生自跳顶
+          expect(items.map((it) => it.content).toList(), [
+            'First Fav',
+            'Second Fav Updated',
+            'Third Fav',
+          ]);
+        },
+      );
     });
 
     group('Today 查询', () {
@@ -125,9 +168,15 @@ void main() {
 
         expect(allItems.map((it) => it.content), contains('Overdue Node'));
         expect(allItems.map((it) => it.content), contains('Today Node'));
-        expect(allItems.map((it) => it.content), isNot(contains('Tomorrow Node')));
+        expect(
+          allItems.map((it) => it.content),
+          isNot(contains('Tomorrow Node')),
+        );
         expect(allItems.map((it) => it.content), isNot(contains('Today Done')));
-        expect(allItems.map((it) => it.content), isNot(contains('Today Archived')));
+        expect(
+          allItems.map((it) => it.content),
+          isNot(contains('Today Archived')),
+        );
 
         // 验证分组：已逾期与今天
         final overdueGroup = groups.firstWhere((g) => g.title == '已逾期');
@@ -146,29 +195,47 @@ void main() {
         final n2 = await commands.createNode(parentId: null, content: 'Today');
         await commands.updateDueDate(n2.id, today);
 
-        final n3 = await commands.createNode(parentId: null, content: 'Overdue');
+        final n3 = await commands.createNode(
+          parentId: null,
+          content: 'Overdue',
+        );
         await commands.updateDueDate(n3.id, yesterday);
 
-        final n4 = await commands.createNode(parentId: null, content: 'Tomorrow');
+        final n4 = await commands.createNode(
+          parentId: null,
+          content: 'Tomorrow',
+        );
         await commands.updateDueDate(n4.id, tomorrow);
 
         await commands.createNode(parentId: null, content: 'No Due');
 
-        final dueDone = await commands.createNode(parentId: null, content: 'Due Done');
+        final dueDone = await commands.createNode(
+          parentId: null,
+          content: 'Due Done',
+        );
         await commands.updateDueDate(dueDone.id, today);
         await commands.toggleDone(dueDone.id);
 
-        final dueArchived = await commands.createNode(parentId: null, content: 'Due Archived');
+        final dueArchived = await commands.createNode(
+          parentId: null,
+          content: 'Due Archived',
+        );
         await commands.updateDueDate(dueArchived.id, today);
         await commands.archiveNode(dueArchived.id);
 
         final groups = await readGroups(SmartListType.dueDates);
         final allItems = [for (final g in groups) ...g.items];
 
-        expect(allItems.map((it) => it.content), containsAll(['Overdue', 'Today', 'Tomorrow', 'Later']));
+        expect(
+          allItems.map((it) => it.content),
+          containsAll(['Overdue', 'Today', 'Tomorrow', 'Later']),
+        );
         expect(allItems.map((it) => it.content), isNot(contains('No Due')));
         expect(allItems.map((it) => it.content), isNot(contains('Due Done')));
-        expect(allItems.map((it) => it.content), isNot(contains('Due Archived')));
+        expect(
+          allItems.map((it) => it.content),
+          isNot(contains('Due Archived')),
+        );
 
         // 验证日期排序：Overdue -> Today -> Tomorrow -> Later
         final contentsInOrder = allItems.map((it) => it.content).toList();

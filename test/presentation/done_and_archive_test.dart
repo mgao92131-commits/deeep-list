@@ -100,7 +100,10 @@ void main() {
     testWidgets('Done node displays strikethrough and muted color', (
       tester,
     ) async {
-      final node = await commands.createNode(parentId: null, content: 'DoneTask');
+      final node = await commands.createNode(
+        parentId: null,
+        content: 'DoneTask',
+      );
       await pumpApp(tester);
 
       // Verify not struck through initially

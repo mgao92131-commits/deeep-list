@@ -13,6 +13,7 @@ class KeyboardToolbar extends StatefulWidget {
   final VoidCallback? onToggleDone;
   final VoidCallback? onToggleFavorite;
   final ValueChanged<DateTime?>? onDueDateChanged;
+  final VoidCallback? onRequestRestoreFocus;
 
   const KeyboardToolbar({
     super.key,
@@ -25,6 +26,7 @@ class KeyboardToolbar extends StatefulWidget {
     this.onToggleDone,
     this.onToggleFavorite,
     this.onDueDateChanged,
+    this.onRequestRestoreFocus,
   });
 
   @override
@@ -145,8 +147,9 @@ class _KeyboardToolbarState extends State<KeyboardToolbar> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final tomorrow = today.add(const Duration(days: 1));
-    final daysUntilNextMonday =
-        today.weekday == DateTime.monday ? 7 : (8 - today.weekday);
+    final daysUntilNextMonday = today.weekday == DateTime.monday
+        ? 7
+        : (8 - today.weekday);
     final nextMonday = today.add(Duration(days: daysUntilNextMonday));
 
     final hasDueDate = widget.dueDate != null;
@@ -171,15 +174,20 @@ class _KeyboardToolbarState extends State<KeyboardToolbar> {
               : theme.colorScheme.onSurfaceVariant,
         ),
         position: PopupMenuPosition.over,
+        onCanceled: widget.onRequestRestoreFocus,
         onSelected: (action) async {
           if (action == 'today') {
             widget.onDueDateChanged?.call(today);
+            widget.onRequestRestoreFocus?.call();
           } else if (action == 'tomorrow') {
             widget.onDueDateChanged?.call(tomorrow);
+            widget.onRequestRestoreFocus?.call();
           } else if (action == 'next_monday') {
             widget.onDueDateChanged?.call(nextMonday);
+            widget.onRequestRestoreFocus?.call();
           } else if (action == 'remove') {
             widget.onDueDateChanged?.call(null);
+            widget.onRequestRestoreFocus?.call();
           } else if (action == 'custom') {
             final picked = await showDatePicker(
               context: context,
@@ -192,6 +200,7 @@ class _KeyboardToolbarState extends State<KeyboardToolbar> {
                 DateTime(picked.year, picked.month, picked.day),
               );
             }
+            widget.onRequestRestoreFocus?.call();
           }
         },
         itemBuilder: (context) {
@@ -207,8 +216,7 @@ class _KeyboardToolbarState extends State<KeyboardToolbar> {
             } else if (isTomorrow) {
               curDesc = '明天 (${currentDueDate.month}月${currentDueDate.day}日)';
             } else if (isPast) {
-              curDesc =
-                  '${currentDueDate.month}月${currentDueDate.day}日 (已逾期)';
+              curDesc = '${currentDueDate.month}月${currentDueDate.day}日 (已逾期)';
             } else {
               curDesc = '${currentDueDate.month}月${currentDueDate.day}日';
             }

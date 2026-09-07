@@ -2,12 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../domain/node.dart';
 
-enum _MenuAction {
-  copy,
-  paste,
-  archive,
-  delete,
-}
+enum _MenuAction { copy, paste, archive, delete }
 
 class NodeActionMenu {
   const NodeActionMenu._();
@@ -36,9 +31,7 @@ class NodeActionMenu {
       context: context,
       position: relativePosition,
       elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       items: [
         PopupMenuItem<_MenuAction>(
           value: _MenuAction.copy,

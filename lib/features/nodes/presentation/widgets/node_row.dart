@@ -19,6 +19,7 @@ class NodeRow extends StatefulWidget {
   final Future<void> Function() onBackspaceEmpty;
   final VoidCallback onIndent;
   final VoidCallback onOutdent;
+  final bool enableSwipeGestures;
 
   const NodeRow({
     super.key,
@@ -34,6 +35,7 @@ class NodeRow extends StatefulWidget {
     required this.onBackspaceEmpty,
     required this.onIndent,
     required this.onOutdent,
+    this.enableSwipeGestures = true,
   });
 
   @override
@@ -307,12 +309,18 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
       width: double.infinity,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onHorizontalDragStart: widget.isEditing ? null : _onHorizontalDragStart,
-        onHorizontalDragUpdate: widget.isEditing
+        onHorizontalDragStart: (!widget.enableSwipeGestures || widget.isEditing)
+            ? null
+            : _onHorizontalDragStart,
+        onHorizontalDragUpdate:
+            (!widget.enableSwipeGestures || widget.isEditing)
             ? null
             : _onHorizontalDragUpdate,
-        onHorizontalDragEnd: widget.isEditing ? null : _onHorizontalDragEnd,
-        onHorizontalDragCancel: widget.isEditing
+        onHorizontalDragEnd: (!widget.enableSwipeGestures || widget.isEditing)
+            ? null
+            : _onHorizontalDragEnd,
+        onHorizontalDragCancel:
+            (!widget.enableSwipeGestures || widget.isEditing)
             ? null
             : _onHorizontalDragCancel,
         onTap: () {
@@ -399,11 +407,7 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
           height: 22,
           child: isFavorite
               ? const Center(
-                  child: Icon(
-                    Icons.star,
-                    size: 17,
-                    color: Color(0xFFF59E0B),
-                  ),
+                  child: Icon(Icons.star, size: 17, color: Color(0xFFF59E0B)),
                 )
               : null,
         ),
@@ -452,9 +456,8 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
                           style: TextStyle(
                             fontSize: 12,
                             height: 1.2,
-                            color: theme.colorScheme.onSurfaceVariant.withValues(
-                              alpha: 0.55,
-                            ),
+                            color: theme.colorScheme.onSurfaceVariant
+                                .withValues(alpha: 0.55),
                           ),
                         ),
                       ),
@@ -477,8 +480,9 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
     final date = DateTime(dueDate.year, dueDate.month, dueDate.day);
 
     if (date.isBefore(today)) {
-      final isYesterday =
-          date.isAtSameMomentAs(today.subtract(const Duration(days: 1)));
+      final isYesterday = date.isAtSameMomentAs(
+        today.subtract(const Duration(days: 1)),
+      );
       final label = isYesterday
           ? '昨天 (已逾期)'
           : '${date.month}月${date.day}日 (已逾期)';

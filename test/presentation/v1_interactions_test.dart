@@ -466,22 +466,23 @@ void main() {
   });
 
   // N. KeyboardToolbar 保留完成与颜色按钮，无更多/缩进入口
-  testWidgets('N. keyboard toolbar has done and color buttons and does not contain more or indent buttons', (
-    tester,
-  ) async {
-    await commands.createNode(parentId: null, content: 'Active');
-    await pumpApp(tester);
+  testWidgets(
+    'N. keyboard toolbar has done and color buttons and does not contain more or indent buttons',
+    (tester) async {
+      await commands.createNode(parentId: null, content: 'Active');
+      await pumpApp(tester);
 
-    // Tap to edit
-    await tester.tap(find.text('Active'));
-    await tester.pumpAndSettle();
+      // Tap to edit
+      await tester.tap(find.text('Active'));
+      await tester.pumpAndSettle();
 
-    expect(find.byTooltip('完成'), findsOneWidget);
-    expect(find.byTooltip('颜色'), findsOneWidget);
-    expect(find.byTooltip('更多'), findsNothing);
-    expect(find.byTooltip('Indent'), findsNothing);
-    expect(find.byTooltip('Outdent'), findsNothing);
-  });
+      expect(find.byTooltip('完成'), findsOneWidget);
+      expect(find.byTooltip('颜色'), findsOneWidget);
+      expect(find.byTooltip('更多'), findsNothing);
+      expect(find.byTooltip('Indent'), findsNothing);
+      expect(find.byTooltip('Outdent'), findsNothing);
+    },
+  );
 
   // O. 左右滑动保持 (indent / outdent)
   testWidgets('O. swipe right indents node and swipe left outdents node', (

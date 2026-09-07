@@ -99,24 +99,22 @@ void main() {
     },
   );
 
-  testWidgets('Long-press context menu does not contain background color entry', (
-    tester,
-  ) async {
-    await commands.createNode(
-      parentId: null,
-      content: 'Long Press Me',
-    );
-    await pumpApp(tester);
+  testWidgets(
+    'Long-press context menu does not contain background color entry',
+    (tester) async {
+      await commands.createNode(parentId: null, content: 'Long Press Me');
+      await pumpApp(tester);
 
-    // Long press node
-    await tester.longPress(find.text('Long Press Me'));
-    await tester.pumpAndSettle();
+      // Long press node
+      await tester.longPress(find.text('Long Press Me'));
+      await tester.pumpAndSettle();
 
-    // Check '背景色' is NOT in the action menu
-    expect(find.text('背景色'), findsNothing);
-    // Menu still contains standard actions
-    expect(find.text('复制'), findsOneWidget);
-    expect(find.text('归档'), findsOneWidget);
-    expect(find.text('删除'), findsOneWidget);
-  });
+      // Check '背景色' is NOT in the action menu
+      expect(find.text('背景色'), findsNothing);
+      // Menu still contains standard actions
+      expect(find.text('复制'), findsOneWidget);
+      expect(find.text('归档'), findsOneWidget);
+      expect(find.text('删除'), findsOneWidget);
+    },
+  );
 }

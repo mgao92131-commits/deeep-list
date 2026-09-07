@@ -38,7 +38,9 @@ class VisibleNodeItem {
       previousSiblingId: previousSiblingId ?? this.previousSiblingId,
       isLastInParent: isLastInParent ?? this.isLastInParent,
       childCount: childCount ?? this.childCount,
-      pathText: identical(pathText, _unset) ? this.pathText : pathText as String?,
+      pathText: identical(pathText, _unset)
+          ? this.pathText
+          : pathText as String?,
     );
   }
 

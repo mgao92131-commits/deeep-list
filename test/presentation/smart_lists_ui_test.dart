@@ -47,18 +47,21 @@ void main() {
         parentId: null,
         content: 'Parent Node',
       );
-      await commands.createNode(
-        parentId: parent.id,
-        content: 'Child Node',
-      );
+      await commands.createNode(parentId: parent.id, content: 'Child Node');
 
       await pumpApp(tester);
 
       // 最顶层主页：SmartEntriesBar 存在，包含三个入口
       expect(find.byType(SmartEntriesBar), findsOneWidget);
       expect(find.byKey(const ValueKey('smart-entry-today')), findsOneWidget);
-      expect(find.byKey(const ValueKey('smart-entry-favorites')), findsOneWidget);
-      expect(find.byKey(const ValueKey('smart-entry-due-dates')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('smart-entry-favorites')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('smart-entry-due-dates')),
+        findsOneWidget,
+      );
 
       // 点击右侧下钻进入子节点页面
       await tester.tap(find.byTooltip('Open'));
@@ -139,7 +142,10 @@ void main() {
     });
 
     testWidgets('键盘工具栏收藏 Toggle 不会结束编辑，焦点保持在 TextField', (tester) async {
-      final node = await commands.createNode(parentId: null, content: 'Task to Favorite');
+      final node = await commands.createNode(
+        parentId: null,
+        content: 'Task to Favorite',
+      );
       await pumpApp(tester);
 
       // 点击进入编辑
@@ -162,7 +168,9 @@ void main() {
       expect(updated!.isFavorite, isTrue);
 
       // 验证仍在编辑状态，焦点仍在 TextField
-      final container = ProviderScope.containerOf(tester.element(find.byType(DeepListApp)));
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DeepListApp)),
+      );
       final controller = container.read(nodePageControllerProvider(null));
       expect(controller.mode, PageMode.editing);
       expect(controller.editingNodeId, node.id);
@@ -175,7 +183,10 @@ void main() {
     });
 
     testWidgets('智能列表中完成节点立即从智能列表消失', (tester) async {
-      final favNode = await commands.createNode(parentId: null, content: 'Favorite Task');
+      final favNode = await commands.createNode(
+        parentId: null,
+        content: 'Favorite Task',
+      );
       await commands.toggleFavorite(favNode.id);
 
       await pumpApp(tester);

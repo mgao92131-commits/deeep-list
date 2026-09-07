@@ -60,7 +60,11 @@ class MemoryNodeRepository implements TreeMutationRepository {
       final list = _nodes.values
           .where((node) => node.isFavorite && !node.isDone && !node.isArchived)
           .toList();
-      list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      list.sort((a, b) {
+        final cmp = a.createdAt.compareTo(b.createdAt);
+        if (cmp != 0) return cmp;
+        return a.id.compareTo(b.id);
+      });
       return list;
     }
 
@@ -72,7 +76,9 @@ class MemoryNodeRepository implements TreeMutationRepository {
   Stream<List<Node>> watchDueNodes() async* {
     List<Node> read() {
       final list = _nodes.values
-          .where((node) => node.dueDate != null && !node.isDone && !node.isArchived)
+          .where(
+            (node) => node.dueDate != null && !node.isDone && !node.isArchived,
+          )
           .toList();
       list.sort((a, b) {
         final cmp = a.dueDate!.compareTo(b.dueDate!);
@@ -106,9 +112,13 @@ class MemoryNodeRepository implements TreeMutationRepository {
   }
 
   Duration? transactionDelay;
+  bool throwOnWrite = false;
 
   @override
   Future<T> transaction<T>(TreeTransactionAction<T> action) async {
+    if (throwOnWrite) {
+      throw StateError('Simulated database write failure');
+    }
     if (transactionDelay != null) {
       await Future<void>.delayed(transactionDelay!);
     }

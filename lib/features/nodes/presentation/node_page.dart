@@ -11,6 +11,7 @@ import '../application/clipboard_controller.dart';
 import '../application/node_page_controller.dart';
 import '../domain/node.dart';
 import '../domain/node_id.dart';
+import 'controllers/node_editing_coordinator.dart';
 import 'editor_session.dart';
 import 'models/visible_node_item.dart';
 import 'node_list.dart';
@@ -30,26 +31,42 @@ class NodePage extends ConsumerStatefulWidget {
 
 class _NodePageState extends ConsumerState<NodePage>
     with RouteAware, WidgetsBindingObserver {
-  static const _autosaveDelay = Duration(milliseconds: 400);
-
-  late final EditorSession _editorSession;
-  final _mutationQueue = _MutationQueue();
+  late final NodeEditingCoordinator _coordinator;
   final _structuralCommandsInFlight = <NodeId>{};
-  Timer? _autosaveTimer;
-  NodeId? _pendingAutosaveNodeId;
-  String? _pendingAutosaveText;
-  Future<bool>? _autosaveInFlight;
-  double _lastBottomInset = 0.0;
-  int? _keyboardSessionGeneration;
   bool _routeSubscribed = false;
-  bool _isHandlingEnter = false;
   Timer? _enterProtectionTimer;
   List<NodeId>? _optimisticOrder;
+
+  EditorSession get _editorSession => _coordinator.editorSession;
+  bool get _isHandlingEnter => _coordinator.isHandlingEnter;
+  set _isHandlingEnter(bool value) => _coordinator.isHandlingEnter = value;
 
   @override
   void initState() {
     super.initState();
-    _editorSession = EditorSession();
+    _coordinator = NodeEditingCoordinator(
+      treeCommandService: ref.read(treeCommandServiceProvider),
+      onError: _showMutationError,
+      activeNodeIdProvider: () =>
+          ref.read(nodePageControllerProvider(widget.parentId)).editingNodeId,
+      onEditingStarted: (nodeId) {
+        if (!mounted) return;
+        ref
+            .read(nodePageControllerProvider(widget.parentId).notifier)
+            .startEditing(nodeId);
+      },
+      onEditingEnded: () {
+        if (!mounted) return;
+        final currentMode = ref
+            .read(nodePageControllerProvider(widget.parentId))
+            .mode;
+        if (currentMode == PageMode.editing) {
+          ref
+              .read(nodePageControllerProvider(widget.parentId).notifier)
+              .toNormal();
+        }
+      },
+    );
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -60,10 +77,8 @@ class _NodePageState extends ConsumerState<NodePage>
         View.maybeOf(context) ??
         WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
     if (view != null) {
-      _lastBottomInset = view.viewInsets.bottom / view.devicePixelRatio;
-      if (_lastBottomInset > 0) {
-        _keyboardSessionGeneration = _editorSession.focusGeneration;
-      }
+      final bottomInset = view.viewInsets.bottom / view.devicePixelRatio;
+      _coordinator.initBottomInset(bottomInset);
     }
     if (_routeSubscribed) return;
     final route = ModalRoute.of(context);
@@ -94,7 +109,7 @@ class _NodePageState extends ConsumerState<NodePage>
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
-      unawaited(_finishActiveEditing(discardIfEmpty: true));
+      _coordinator.handleLifecyclePause();
     }
   }
 
@@ -107,283 +122,69 @@ class _NodePageState extends ConsumerState<NodePage>
     if (view == null) return;
 
     final bottomInset = view.viewInsets.bottom / view.devicePixelRatio;
-    final keyboardWasVisible = _lastBottomInset > 0;
-    final keyboardIsVisible = bottomInset > 0;
-
-    if (keyboardIsVisible) {
-      _keyboardSessionGeneration = _editorSession.focusGeneration;
+    if (mounted) {
+      final pageState = ref.read(nodePageControllerProvider(widget.parentId));
+      _coordinator.handleMetricsChange(
+        bottomInset: bottomInset,
+        isCurrentlyEditing: pageState.mode == PageMode.editing,
+      );
     }
-
-    if (_editorSession.hasPendingFocus) {
-      _lastBottomInset = bottomInset;
-      return;
-    }
-
-    if (keyboardWasVisible && !keyboardIsVisible) {
-      if (_editorSession.isHandingOver) {
-        _lastBottomInset = bottomInset;
-        return;
-      }
-      if (_isHandlingEnter) {
-        _lastBottomInset = bottomInset;
-        return;
-      }
-      if (mounted) {
-        final pageState = ref.read(nodePageControllerProvider(widget.parentId));
-        final editingId = pageState.editingNodeId;
-        final isSameGeneration =
-            _keyboardSessionGeneration == null ||
-            _keyboardSessionGeneration == _editorSession.focusGeneration;
-
-        final shouldFinish =
-            !_isHandlingEnter &&
-            !_editorSession.isHandingOver &&
-            !_editorSession.hasPendingFocus &&
-            editingId != null &&
-            !_editorSession.isFocused(editingId) &&
-            isSameGeneration;
-
-        if (shouldFinish && pageState.mode == PageMode.editing) {
-          unawaited(_finishActiveEditing(discardIfEmpty: true));
-        }
-      }
-    }
-
-    _lastBottomInset = bottomInset;
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _autosaveTimer?.cancel();
     _enterProtectionTimer?.cancel();
     if (_routeSubscribed) {
       routeObserver.unsubscribe(this);
     }
-    _editorSession.dispose();
+    _coordinator.dispose();
     super.dispose();
   }
 
-  // Issue 3: Universal single exit point for editing sessions
-  // Safe empty node cleanup: only delete when activeText is confirmed non-null and trim().isEmpty.
-  // Never delete when activeText == null (state unready, blur race, or controller unavailable).
-  Future<bool> _finishActiveEditing({bool discardIfEmpty = true}) async {
-    if (_isHandlingEnter || _editorSession.isHandingOver) return false;
-    _autosaveTimer?.cancel();
-    _autosaveTimer = null;
-    _pendingAutosaveNodeId = null;
-    _pendingAutosaveText = null;
+  Future<bool> _finishActiveEditing({bool discardIfEmpty = true}) =>
+      _coordinator.finishActiveEditing(discardIfEmpty: discardIfEmpty);
 
-    final activeId =
-        _editorSession.activeNodeId ??
-        ref.read(nodePageControllerProvider(widget.parentId)).editingNodeId;
+  Future<void> _startEditing(Node node) => _coordinator.startEditing(node);
 
-    if (activeId != null) {
-      final activeText = _editorSession.activeText;
+  Future<void> _deleteEmptyNode(NodeId nodeId) =>
+      _coordinator.deleteEmptyNode(nodeId);
 
-      if (activeText != null && activeText.trim().isEmpty && discardIfEmpty) {
-        _editorSession.suppressBlurCommit(activeId);
-        try {
-          await _deleteEmptyNode(activeId);
-        } finally {
-          _editorSession.allowBlurCommit(activeId);
-        }
-        _editorSession.unfocus();
-        if (mounted) {
-          final currentMode = ref
-              .read(nodePageControllerProvider(widget.parentId))
-              .mode;
-          if (currentMode == PageMode.editing) {
-            ref
-                .read(nodePageControllerProvider(widget.parentId).notifier)
-                .toNormal();
-          }
-        }
-        return true;
-      }
-    }
+  void _scheduleAutosave(NodeId nodeId, String text) =>
+      _coordinator.scheduleAutosave(nodeId, text);
 
-    final saved = await _flushPendingEdit(commitCurrent: true);
-    if (mounted) {
-      final currentMode = ref
-          .read(nodePageControllerProvider(widget.parentId))
-          .mode;
-      if (currentMode == PageMode.editing) {
-        ref
-            .read(nodePageControllerProvider(widget.parentId).notifier)
-            .toNormal();
-      }
-    }
-    return saved;
-  }
+  Future<bool> _saveContent(NodeId nodeId, String text) =>
+      _coordinator.saveContent(nodeId, text);
 
-  Future<void> _startEditing(Node node) async {
-    final currentEditingId = ref
-        .read(nodePageControllerProvider(widget.parentId))
-        .editingNodeId;
-    if (currentEditingId == node.id) return;
-
-    if (currentEditingId != null) {
-      final activeText = _editorSession.activeText;
-      if (activeText != null && activeText.trim().isEmpty) {
-        _editorSession.suppressBlurCommit(currentEditingId);
-        try {
-          await _deleteEmptyNode(currentEditingId);
-        } finally {
-          _editorSession.allowBlurCommit(currentEditingId);
-        }
-      } else {
-        await _flushPendingEdit(commitCurrent: true, unfocus: false);
-      }
-
-      if (!mounted) return;
-      ref
-          .read(nodePageControllerProvider(widget.parentId).notifier)
-          .startEditing(node.id);
-      _editorSession.handoverFocus(
-        currentEditingId,
-        node.id,
-        cursor: node.content.length,
-      );
-      return;
-    }
-
-    if (!mounted) return;
-    ref
-        .read(nodePageControllerProvider(widget.parentId).notifier)
-        .startEditing(node.id);
-    _editorSession.focus(node.id, cursor: node.content.length);
-  }
-
-  Future<void> _deleteEmptyNode(NodeId nodeId) async {
-    _autosaveTimer?.cancel();
-    _autosaveTimer = null;
-    _pendingAutosaveNodeId = null;
-    _pendingAutosaveText = null;
-    _editorSession.suppressBlurCommit(nodeId);
-    try {
-      await _mutationQueue.add(
-        () => ref.read(treeCommandServiceProvider).deleteSubtree(nodeId),
-      );
-    } catch (error) {
-      if (error is! StateError || !error.message.contains('does not exist')) {
-        _showMutationError(error);
-      }
-    } finally {
-      _editorSession.allowBlurCommit(nodeId);
-    }
-  }
-
-  void _scheduleAutosave(NodeId nodeId, String text) {
-    _pendingAutosaveNodeId = nodeId;
-    _pendingAutosaveText = text;
-    _autosaveTimer?.cancel();
-    _autosaveTimer = Timer(_autosaveDelay, _startPendingAutosave);
-  }
-
-  void _startPendingAutosave() {
-    _autosaveTimer = null;
-    final nodeId = _pendingAutosaveNodeId;
-    final text = _pendingAutosaveText;
-    _pendingAutosaveNodeId = null;
-    _pendingAutosaveText = null;
-    if (nodeId == null || text == null) return;
-
-    final save = _saveContent(nodeId, text);
-    _autosaveInFlight = save;
-    unawaited(
-      save.then((_) {
-        if (identical(_autosaveInFlight, save)) {
-          _autosaveInFlight = null;
-        }
-      }),
-    );
-  }
-
-  Future<bool> _saveContent(NodeId nodeId, String text) async {
-    try {
-      final commands = ref.read(treeCommandServiceProvider);
-      await _mutationQueue.add(() => commands.updateContent(nodeId, text));
-      return true;
-    } catch (error) {
-      _showMutationError(error);
-      return false;
-    }
-  }
-
-  Future<void> _commit(NodeId nodeId, String text) async {
-    if (_pendingAutosaveNodeId == nodeId) {
-      _autosaveTimer?.cancel();
-      _autosaveTimer = null;
-      _pendingAutosaveNodeId = null;
-      _pendingAutosaveText = null;
-    }
-
-    if (text.trim().isEmpty) {
-      await _deleteEmptyNode(nodeId);
-      if (mounted) {
-        ref
-            .read(nodePageControllerProvider(widget.parentId).notifier)
-            .toNormal();
-      }
-      return;
-    }
-
-    await _saveContent(nodeId, text);
-  }
+  Future<void> _commit(NodeId nodeId, String text) =>
+      _coordinator.commit(nodeId, text);
 
   Future<T?> _runMutation<T>(Future<T> Function() mutation) async {
     try {
-      return await _mutationQueue.add(mutation);
+      return await _coordinator.runMutation(mutation);
     } catch (error) {
       _showMutationError(error);
       return null;
     }
   }
 
-  Future<void> _drainAutosaveForStructuralCommand() async {
-    _autosaveTimer?.cancel();
-    _autosaveTimer = null;
-    _pendingAutosaveNodeId = null;
-    _pendingAutosaveText = null;
-    final inFlight = _autosaveInFlight;
-    if (inFlight != null) await inFlight;
-    await _mutationQueue.idle;
-  }
+  Future<void> _drainAutosaveForStructuralCommand() =>
+      _coordinator.drainAutosave();
 
   Future<bool> _flushPendingEdit({
     required bool commitCurrent,
     bool unfocus = true,
-  }) async {
-    _autosaveTimer?.cancel();
-    _autosaveTimer = null;
-    final pendingNodeId = _pendingAutosaveNodeId;
-    final pendingText = _pendingAutosaveText;
-    _pendingAutosaveNodeId = null;
-    _pendingAutosaveText = null;
+  }) => _coordinator.flushPendingEdit(
+    commitCurrent: commitCurrent,
+    unfocus: unfocus,
+  );
 
-    var saved = true;
-    if (commitCurrent && pendingNodeId != null && pendingText != null) {
-      if (!await _saveContent(pendingNodeId, pendingText)) saved = false;
-    }
-
-    if (commitCurrent) {
-      final activeNodeId = _editorSession.activeNodeId;
-      final activeText = _editorSession.activeText;
-      final pendingWasActive =
-          pendingNodeId == activeNodeId && pendingText == activeText;
-      if (activeNodeId != null && activeText != null && !pendingWasActive) {
-        if (!await _saveContent(activeNodeId, activeText)) saved = false;
+  void _restoreFocus(NodeId nodeId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _editorSession.activeNodeId == nodeId) {
+        _editorSession.focus(nodeId);
       }
-    }
-
-    final inFlight = _autosaveInFlight;
-    if (inFlight != null && !await inFlight) saved = false;
-    await _mutationQueue.idle;
-    if (unfocus) {
-      _editorSession.unfocus();
-    }
-    return saved;
+    });
   }
 
   // Spec 12 & 14: Enter rules
@@ -654,7 +455,7 @@ class _NodePageState extends ConsumerState<NodePage>
       onPaste: canPaste
           ? () async {
               try {
-                await _mutationQueue.add(
+                await _coordinator.runMutation(
                   () => ref
                       .read(treeCommandServiceProvider)
                       .copySubtree(
@@ -992,6 +793,7 @@ class _NodePageState extends ConsumerState<NodePage>
                         ),
                       );
                     },
+                    onRequestRestoreFocus: () => _restoreFocus(activeItem.id),
                   ),
               ],
             );
@@ -1003,19 +805,4 @@ class _NodePageState extends ConsumerState<NodePage>
       ),
     );
   }
-}
-
-class _MutationQueue {
-  Future<void> _tail = Future<void>.value();
-
-  Future<T> add<T>(Future<T> Function() operation) {
-    final result = _tail.then<T>((_) => operation());
-    _tail = result.then<void>(
-      (_) {},
-      onError: (Object error, StackTrace stackTrace) {},
-    );
-    return result;
-  }
-
-  Future<void> get idle => _tail;
 }

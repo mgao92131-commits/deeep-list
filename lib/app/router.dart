@@ -8,7 +8,23 @@ import '../features/nodes/presentation/smart_node_page.dart';
 
 part 'router.g.dart';
 
-final routeObserver = RouteObserver<ModalRoute<void>>();
+class AppRouteObserver extends RouteObserver<ModalRoute<void>> {
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (route is! PopupRoute) {
+      super.didPush(route, previousRoute);
+    }
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (route is! PopupRoute) {
+      super.didPop(route, previousRoute);
+    }
+  }
+}
+
+final routeObserver = AppRouteObserver();
 
 @Riverpod(keepAlive: true)
 GoRouter router(Ref ref) {

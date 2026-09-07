@@ -43,15 +43,15 @@ Future<String> _buildNodePath(NodeRepository repository, Node node) async {
   return 'DeepList › ${names.join(' › ')}';
 }
 
-final favoritesNodesStreamProvider =
-    StreamProvider.autoDispose<List<Node>>((ref) {
-      return ref.watch(nodeRepositoryProvider).watchFavorites();
-    });
+final favoritesNodesStreamProvider = StreamProvider.autoDispose<List<Node>>((
+  ref,
+) {
+  return ref.watch(nodeRepositoryProvider).watchFavorites();
+});
 
-final dueNodesStreamProvider =
-    StreamProvider.autoDispose<List<Node>>((ref) {
-      return ref.watch(nodeRepositoryProvider).watchDueNodes();
-    });
+final dueNodesStreamProvider = StreamProvider.autoDispose<List<Node>>((ref) {
+  return ref.watch(nodeRepositoryProvider).watchDueNodes();
+});
 
 final smartNodesProvider = FutureProvider.autoDispose
     .family<List<SmartNodeGroup>, SmartListType>((ref, type) async {
@@ -122,11 +122,7 @@ final smartNodesProvider = FutureProvider.autoDispose
           }
           if (todayItems.isNotEmpty) {
             groups.add(
-              SmartNodeGroup(
-                title: '今天',
-                items: todayItems,
-                isOverdue: false,
-              ),
+              SmartNodeGroup(title: '今天', items: todayItems, isOverdue: false),
             );
           }
           return groups;
@@ -177,11 +173,7 @@ final smartNodesProvider = FutureProvider.autoDispose
           }
           if (todayItems.isNotEmpty) {
             groups.add(
-              SmartNodeGroup(
-                title: '今天',
-                items: todayItems,
-                isOverdue: false,
-              ),
+              SmartNodeGroup(title: '今天', items: todayItems, isOverdue: false),
             );
           }
           if (tomorrowItems.isNotEmpty) {
@@ -195,11 +187,7 @@ final smartNodesProvider = FutureProvider.autoDispose
           }
           if (laterItems.isNotEmpty) {
             groups.add(
-              SmartNodeGroup(
-                title: '以后',
-                items: laterItems,
-                isOverdue: false,
-              ),
+              SmartNodeGroup(title: '以后', items: laterItems, isOverdue: false),
             );
           }
           return groups;

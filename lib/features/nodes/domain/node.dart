@@ -62,9 +62,7 @@ class Node {
       isFavorite: isFavorite ?? this.isFavorite,
       isArchived: isArchived ?? this.isArchived,
       color: color ?? this.color,
-      dueDate: identical(dueDate, _unset)
-          ? this.dueDate
-          : dueDate as DateTime?,
+      dueDate: identical(dueDate, _unset) ? this.dueDate : dueDate as DateTime?,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

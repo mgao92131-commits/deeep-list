@@ -74,30 +74,40 @@ class DriftNodeRepository implements TreeMutationRepository {
   @override
   Stream<List<domain.Node>> watchFavorites() {
     final query = database.select(database.nodes)
-      ..where((table) =>
-          table.isFavorite.equals(true) &
-          table.isDone.equals(false) &
-          table.isArchived.equals(false))
+      ..where(
+        (table) =>
+            table.isFavorite.equals(true) &
+            table.isDone.equals(false) &
+            table.isArchived.equals(false),
+      )
       ..orderBy([
-        (table) => OrderingTerm(expression: table.updatedAt, mode: OrderingMode.desc),
+        (table) =>
+            OrderingTerm(expression: table.createdAt, mode: OrderingMode.asc),
         (table) => OrderingTerm(expression: table.id),
       ]);
-    return query.watch().map((rows) => rows.map(_toDomain).toList(growable: false));
+    return query.watch().map(
+      (rows) => rows.map(_toDomain).toList(growable: false),
+    );
   }
 
   @override
   Stream<List<domain.Node>> watchDueNodes() {
     final query = database.select(database.nodes)
-      ..where((table) =>
-          table.dueDate.isNotNull() &
-          table.isDone.equals(false) &
-          table.isArchived.equals(false))
+      ..where(
+        (table) =>
+            table.dueDate.isNotNull() &
+            table.isDone.equals(false) &
+            table.isArchived.equals(false),
+      )
       ..orderBy([
-        (table) => OrderingTerm(expression: table.dueDate, mode: OrderingMode.asc),
+        (table) =>
+            OrderingTerm(expression: table.dueDate, mode: OrderingMode.asc),
         (table) => OrderingTerm(expression: table.position),
         (table) => OrderingTerm(expression: table.id),
       ]);
-    return query.watch().map((rows) => rows.map(_toDomain).toList(growable: false));
+    return query.watch().map(
+      (rows) => rows.map(_toDomain).toList(growable: false),
+    );
   }
 
   @override
