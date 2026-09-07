@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:deep_list/app/app.dart';
 import 'package:deep_list/app/providers.dart';
+import 'package:deep_list/features/nodes/application/node_page_controller.dart';
 import 'package:deep_list/features/nodes/application/tree_command_service.dart';
 import 'package:deep_list/features/nodes/presentation/widgets/node_row.dart';
 
@@ -318,10 +319,8 @@ void main() {
       expect(rowText('L2-Node'), findsNothing);
       expect(rowText('L3-Node'), findsNothing);
 
-      // 1. Enter L1-Node
-      await tester.tap(rowText('L1-Node'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.chevron_right));
+      // 1. Enter L1-Node (has 1 child -> tap count '1')
+      await tester.tap(find.text('1').first);
       await tester.pumpAndSettle();
 
       // Inside L1 page: only direct children (L2) are displayed in the list
@@ -337,10 +336,8 @@ void main() {
         findsOneWidget,
       );
 
-      // 2. Enter L2-Node
-      await tester.tap(rowText('L2-Node'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.chevron_right));
+      // 2. Enter L2-Node (has 1 child -> tap count '1')
+      await tester.tap(find.text('1').first);
       await tester.pumpAndSettle();
 
       // Inside L2 page: only direct children (L3) are displayed in the list
@@ -368,11 +365,7 @@ void main() {
         findsOneWidget,
       );
 
-      // 4. Pop back to Root
-      // On L1 page, L2 was selected so first back transitions Selected -> Normal (Spec 35)
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      // Second back pops to Root
+      // 4. Pop back to Root (page was in Normal state because direct navigation was used)
       await tester.pageBack();
       await tester.pumpAndSettle();
 
@@ -494,13 +487,16 @@ void main() {
   );
 
   testWidgets(
-    'NodeRow trailing slot displays childCount when > 0, blanks when 0, and switches to chevron in selected state',
+    'NodeRow trailing slot displays childCount when > 0, chevron when == 0, across Normal, Selected, and Dragging; navigates directly',
     (tester) async {
       final parentA = await commands.createNode(
         parentId: null,
         content: 'Parent A',
       );
-      await commands.createNode(parentId: null, content: 'Parent B');
+      await commands.createNode(
+        parentId: null,
+        content: 'Parent B',
+      );
       // Create 3 children under Parent A (2 active, 1 archived)
       await commands.createNode(parentId: parentA.id, content: 'Child A1');
       await commands.createNode(parentId: parentA.id, content: 'Child A2');
@@ -512,32 +508,74 @@ void main() {
 
       await pumpApp(tester);
 
-      // Normal state:
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DeepListApp)),
+      );
+
+      // Rule 1: Normal state:
       // Parent A has 2 unarchived children -> shows "2"
       expect(find.text('2'), findsOneWidget);
-
-      // Parent B has 0 children -> no count text (find.text('0') does not exist)
-      expect(find.text('0'), findsNothing);
-
-      // Tap on count '2' area of Parent A -> taps whole node into Selected mode (warnIfMissed: false because IgnorePointer intentionally passes through)
-      await tester.tap(find.text('2'), warnIfMissed: false);
-      await tester.pumpAndSettle();
-
-      // Now Parent A is in Selected state:
-      // The count '2' is replaced by Chevron (›)
-      expect(find.text('2'), findsNothing);
+      // Parent B has 0 children -> shows chevron_right
       expect(find.byIcon(Icons.chevron_right), findsOneWidget);
 
-      // Tap the Chevron -> navigates to /node/Parent A
-      await tester.tap(find.byIcon(Icons.chevron_right));
+      // Rule 1 verification: Tap count '2' in Normal directly enters subpage without prior selection!
+      await tester.tap(find.text('2'));
       await tester.pumpAndSettle();
-
-      // DeepList page header displays Parent A's title
-      expect(find.text('Parent A'), findsWidgets);
-      // In Parent A's page, unarchived children are visible
       expect(find.text('Child A1'), findsOneWidget);
       expect(find.text('Child A2'), findsOneWidget);
       expect(find.text('Child A3'), findsNothing);
+
+      // Back to root
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      // Rule 3 verification: Tap chevron on Parent B (childCount == 0) directly enters empty subpage!
+      await tester.tap(find.byIcon(Icons.chevron_right));
+      await tester.pumpAndSettle();
+      expect(find.text('Parent B'), findsWidgets);
+      expect(find.text('点击空白处开始记录'), findsOneWidget);
+
+      // Back to root
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      // Rule 2 & 5: Tap Parent A text once -> enters Selected mode
+      await tester.tap(find.text('Parent A'));
+      await tester.pumpAndSettle();
+      // Right side STILL displays number '2', does NOT turn into chevron!
+      expect(find.text('2'), findsOneWidget);
+      // Tapping '2' in Selected mode also navigates
+      await tester.tap(find.text('2'));
+      await tester.pumpAndSettle();
+      expect(find.text('Child A1'), findsOneWidget);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      // Rule 4: Tap Parent B text once -> enters Selected mode
+      await tester.tap(find.text('Parent B'));
+      await tester.pumpAndSettle();
+      // Right side STILL displays chevron_right!
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+
+      // Rule 5: Tap Parent B text a second time -> enters Editing mode
+      await tester.tap(find.text('Parent B'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsOneWidget);
+
+      // Rule 7: Editing mode -> trailing slot is empty (no chevron, no number)
+      expect(find.byIcon(Icons.chevron_right), findsNothing);
+      expect(find.text('2'), findsOneWidget); // only on Parent A
+
+      // Exit editing to normal
+      container.read(nodePageControllerProvider(null).notifier).toNormal();
+      await tester.pumpAndSettle();
+
+      // Rule 6: Dragging mode -> trailing slot preserves child count and chevron
+      container.read(nodePageControllerProvider(null).notifier).startDragging(parentA.id);
+      await tester.pump();
+      expect(find.text('2'), findsOneWidget); // number 2 persists on Parent A
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget); // chevron persists on Parent B
     },
   );
 

@@ -279,6 +279,7 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
         minLines: 1,
         maxLines: null,
         textInputAction: TextInputAction.done,
+        onEditingComplete: () {},
         style: textStyle,
         decoration: InputDecoration(
           border: InputBorder.none,
@@ -395,36 +396,42 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
     if (widget.isEditing) {
       return const SizedBox(width: 48);
     }
-    if (widget.isSelected) {
-      return Tooltip(
-        message: 'Open',
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => unawaited(widget.onNavigate()),
-          child: Container(
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 6),
-            child: const Icon(Icons.chevron_right, size: 20),
-          ),
-        ),
-      );
-    }
-    // Normal or Dragging
+
+    Widget trailingContent;
     if (widget.item.childCount > 0) {
-      return IgnorePointer(
-        child: Container(
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.only(right: 8),
-          child: Text(
-            '${widget.item.childCount}',
-            style: TextStyle(
-              fontSize: 13,
-              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-            ),
+      trailingContent = Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 8),
+        child: Text(
+          '${widget.item.childCount}',
+          style: TextStyle(
+            fontSize: 13,
+            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
           ),
         ),
       );
+    } else {
+      trailingContent = Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 6),
+        child: Icon(
+          Icons.chevron_right,
+          size: 20,
+          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45),
+        ),
+      );
     }
-    return const SizedBox(width: 48);
+
+    return Tooltip(
+      message: 'Open',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => unawaited(widget.onNavigate()),
+        child: SizedBox(
+          width: 48,
+          child: trailingContent,
+        ),
+      ),
+    );
   }
 }

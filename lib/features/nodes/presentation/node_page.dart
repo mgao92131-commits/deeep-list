@@ -594,6 +594,8 @@ class _NodePageState extends ConsumerState<NodePage>
 
     final isNormal = pageState.isNormal;
 
+    final isRoot = widget.parentId == null;
+
     return PopScope<void>(
       canPop: isNormal,
       onPopInvokedWithResult: (didPop, _) {
@@ -603,16 +605,24 @@ class _NodePageState extends ConsumerState<NodePage>
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(
-            widget.parentId == null ? 'DeepList' : parent?.content ?? '',
-          ),
-          leading: widget.parentId == null
+          leadingWidth: isRoot ? null : 48,
+          titleSpacing: isRoot ? 16 : 0,
+          leading: isRoot
               ? null
               : IconButton(
                   tooltip: 'Back',
                   icon: const Icon(Icons.arrow_back),
                   onPressed: () => unawaited(_handleBack()),
                 ),
+          title: Text(
+            isRoot ? 'DeepList' : parent?.content ?? '',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ),
         body: nodesAsync.when(
           data: (items) {

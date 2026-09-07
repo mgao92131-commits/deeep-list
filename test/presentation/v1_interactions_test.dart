@@ -254,10 +254,8 @@ void main() {
       final updatedL1 = await repository.getNode(l1.id);
       expect(updatedL1!.parentId, isNull);
 
-      // Navigate into L1
-      await tester.tap(find.text('L1'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.chevron_right));
+      // Navigate into L1 (has 1 child -> tap count '1')
+      await tester.tap(find.text('1'));
       await tester.pumpAndSettle();
 
       // Inside L1: L2 is displayed. Swipe left on L2 by -80dp to outdent
@@ -369,10 +367,8 @@ void main() {
       await commands.createNode(parentId: parent.id, content: 'A3');
       await pumpApp(tester);
 
-      // Navigate into Parent
-      await tester.tap(find.text('Parent'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.chevron_right));
+      // Navigate into Parent (has 3 children -> tap count '3')
+      await tester.tap(find.text('3'));
       await tester.pumpAndSettle();
 
       // Long press A1 and drag downward to A3 to place after A2
@@ -399,10 +395,8 @@ void main() {
       await commands.createNode(parentId: parent.id, content: 'A3');
       await pumpApp(tester);
 
-      // Navigate into Parent
-      await tester.tap(find.text('Parent'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.chevron_right));
+      // Navigate into Parent (has 3 children -> tap count '3')
+      await tester.tap(find.text('3'));
       await tester.pumpAndSettle();
 
       // Long press A3 and drag upward to A2 to place between A1 and A2
