@@ -18,6 +18,7 @@ class NodeEditingCoordinator {
   NodeId? _pendingAutosaveNodeId;
   String? _pendingAutosaveText;
   Future<bool>? _autosaveInFlight;
+  Future<bool>? _finishInFlight;
   late final _keyboard = EditorKeyboardPolicy(
     editorSession,
     () => isHandlingEnter,
@@ -163,7 +164,6 @@ class NodeEditingCoordinator {
         await flushPendingEdit(commitCurrent: true, unfocus: false);
       }
 
-      editing.startEditing(node.id);
       editorSession.handoverFocus(
         currentEditingId,
         node.id,
@@ -172,11 +172,29 @@ class NodeEditingCoordinator {
       return;
     }
 
-    editing.startEditing(node.id);
     editorSession.focus(node.id, cursor: node.content.length);
   }
 
-  Future<bool> finishActiveEditing({bool discardIfEmpty = true}) async {
+  Future<bool> finishActiveEditing({bool discardIfEmpty = true}) {
+    final inFlight = _finishInFlight;
+    if (inFlight != null) return inFlight;
+
+    final finish = _finishActiveEditing(discardIfEmpty: discardIfEmpty);
+    _finishInFlight = finish;
+    unawaited(
+      finish.then<void>(
+        (_) {
+          if (identical(_finishInFlight, finish)) _finishInFlight = null;
+        },
+        onError: (Object _, StackTrace _) {
+          if (identical(_finishInFlight, finish)) _finishInFlight = null;
+        },
+      ),
+    );
+    return finish;
+  }
+
+  Future<bool> _finishActiveEditing({required bool discardIfEmpty}) async {
     if (isHandlingEnter || editorSession.isHandingOver) return false;
     _autosaveTimer?.cancel();
     _autosaveTimer = null;

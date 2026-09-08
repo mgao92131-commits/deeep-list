@@ -30,18 +30,7 @@ class ArchiveStatusBar extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('已归档 · $count', style: theme.textTheme.titleSmall),
-                Text(
-                  '仅显示已归档节点',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
+            child: Text('已归档 · $count', style: theme.textTheme.titleSmall),
           ),
           TextButton(onPressed: onShowActive, child: const Text('未归档')),
         ],

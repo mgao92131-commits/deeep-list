@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:deep_list/app/app.dart';
 import 'package:deep_list/app/providers.dart';
 import 'package:deep_list/features/nodes/application/tree_command_service.dart';
+import 'package:deep_list/features/nodes/presentation/smart_node_page.dart';
 import 'package:deep_list/features/nodes/presentation/widgets/keyboard_toolbar.dart';
 import 'package:deep_list/features/nodes/presentation/widgets/node_row.dart';
 
@@ -79,6 +80,62 @@ void main() {
       // 验证 Item A 的修改已保存到数据库
       final savedA = await repository.getNode(a.id);
       expect(savedA!.content, 'Item A Edited');
+    });
+
+    testWidgets('AppBar 返回会等待编辑内容保存完成后再退出 SmartNodePage', (tester) async {
+      final node = await commands.createNode(
+        parentId: null,
+        content: 'Back Save Task',
+      );
+      await commands.toggleFavorite(node.id);
+      await pumpApp(tester);
+
+      await tester.tap(find.byKey(const ValueKey('smart-entry-favorites')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Back Save Task'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Saved Before Pop');
+      repository.transactionDelay = const Duration(milliseconds: 200);
+
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pump();
+
+      expect(find.byType(SmartNodePage), findsOneWidget);
+      expect((await repository.getNode(node.id))!.content, 'Back Save Task');
+
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SmartNodePage), findsNothing);
+      expect((await repository.getNode(node.id))!.content, 'Saved Before Pop');
+    });
+
+    testWidgets('系统 Back 会等待空节点删除完成后再退出 SmartNodePage', (tester) async {
+      final node = await commands.createNode(
+        parentId: null,
+        content: 'Empty Before Back',
+      );
+      await commands.toggleFavorite(node.id);
+      await pumpApp(tester);
+
+      await tester.tap(find.byKey(const ValueKey('smart-entry-favorites')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Empty Before Back'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '');
+      repository.transactionDelay = const Duration(milliseconds: 200);
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+
+      expect(find.byType(SmartNodePage), findsOneWidget);
+      expect(await repository.getNode(node.id), isNotNull);
+
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SmartNodePage), findsNothing);
+      expect(await repository.getNode(node.id), isNull);
     });
 
     testWidgets('Enter 键规则: 保存并退出编辑，不创建 sibling 同级节点', (tester) async {

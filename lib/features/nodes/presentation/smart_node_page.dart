@@ -33,6 +33,7 @@ class _SmartNodePageState extends ConsumerState<SmartNodePage> {
   late final NodeActionsController _actions;
   NodeId? get _editingNodeId => _coordinator.editing.value.editingNodeId;
   late final EditorLifecycle _lifecycle;
+  bool _isLeaving = false;
 
   EditorSession get _editorSession => _coordinator.editorSession;
 
@@ -127,9 +128,27 @@ class _SmartNodePageState extends ConsumerState<SmartNodePage> {
   }
 
   Future<void> _openNode(Node node) async {
-    await _coordinator.finishActiveEditing(discardIfEmpty: true);
-    if (!mounted) return;
+    final finished = await _coordinator.finishActiveEditing(
+      discardIfEmpty: true,
+    );
+    if (!mounted || !finished) return;
     context.push('/node/${node.id}');
+  }
+
+  Future<void> _handleBack() async {
+    if (_isLeaving) return;
+    _isLeaving = true;
+    try {
+      if (_editingNodeId != null) {
+        final finished = await _coordinator.finishActiveEditing(
+          discardIfEmpty: true,
+        );
+        if (!finished) return;
+      }
+      if (mounted && context.canPop()) context.pop();
+    } finally {
+      _isLeaving = false;
+    }
   }
 
   Future<void> _openActionMenu(Node node, Offset position) async {
@@ -157,25 +176,14 @@ class _SmartNodePageState extends ConsumerState<SmartNodePage> {
     return PopScope<void>(
       canPop: _editingNodeId == null,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) {
-          unawaited(_coordinator.finishActiveEditing(discardIfEmpty: true));
-        }
+        if (!didPop) unawaited(_handleBack());
       },
       child: Scaffold(
         appBar: AppBar(
           leading: IconButton(
             tooltip: 'Back',
             icon: const Icon(Icons.arrow_back),
-            onPressed: () {
-              if (_editingNodeId != null) {
-                unawaited(
-                  _coordinator.finishActiveEditing(discardIfEmpty: true),
-                );
-              }
-              if (context.canPop()) {
-                context.pop();
-              }
-            },
+            onPressed: () => unawaited(_handleBack()),
           ),
           title: Text(
             _pageTitle,

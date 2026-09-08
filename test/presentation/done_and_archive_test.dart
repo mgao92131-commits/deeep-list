@@ -177,7 +177,7 @@ void main() {
     );
 
     testWidgets(
-      'Switching to archived view updates title and shows only archived nodes',
+      'Archived view keeps title and shows a single-line status bar',
       (tester) async {
         await commands.createNode(parentId: null, content: 'Active Item');
         final archivedNode = await commands.createNode(
@@ -198,10 +198,27 @@ void main() {
         await tester.tap(find.text('查看已归档'));
         await tester.pumpAndSettle();
 
-        // Title updated to indicate archived filter
-        expect(find.text('DeepList · 已归档'), findsOneWidget);
+        // AppBar title remains unchanged; archive state is shown by the bar.
+        expect(find.text('DeepList'), findsOneWidget);
+        expect(find.text('DeepList · 已归档'), findsNothing);
         expect(find.text('已归档 · 1'), findsOneWidget);
-        expect(find.text('仅显示已归档节点'), findsOneWidget);
+        expect(find.text('仅显示已归档节点'), findsNothing);
+        final statusBar = find.byKey(const ValueKey('archive-status-bar'));
+        expect(
+          find.descendant(
+            of: statusBar,
+            matching: find.byIcon(Icons.archive_outlined),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: statusBar, matching: find.text('未归档')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: statusBar, matching: find.byType(Column)),
+          findsNothing,
+        );
 
         // List now displays archived item only
         expect(find.text('Archived Item'), findsOneWidget);
@@ -231,6 +248,31 @@ void main() {
         expect(find.byKey(const ValueKey('archive-status-bar')), findsNothing);
       },
     );
+
+    testWidgets('子节点已归档视图保留原节点标题', (tester) async {
+      final parent = await commands.createNode(
+        parentId: null,
+        content: 'Parent Title',
+      );
+      final archivedChild = await commands.createNode(
+        parentId: parent.id,
+        content: 'Archived Child',
+      );
+      await commands.archiveNode(archivedChild.id);
+      await pumpApp(tester);
+
+      await tester.tap(find.byTooltip('Open'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('查看已归档'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Parent Title'), findsOneWidget);
+      expect(find.text('Parent Title · 已归档'), findsNothing);
+      expect(find.text('已归档 · 1'), findsOneWidget);
+      expect(find.text('Archived Child'), findsOneWidget);
+    });
 
     testWidgets(
       'Restoring node in archived view displays 恢复 and restores node',
@@ -295,7 +337,8 @@ void main() {
         await tester.tap(find.text('查看已归档'));
         await tester.pumpAndSettle();
 
-        expect(find.text('DeepList · 已归档'), findsOneWidget);
+        expect(find.text('DeepList'), findsOneWidget);
+        expect(find.text('DeepList · 已归档'), findsNothing);
         expect(find.text('Sole Archived'), findsOneWidget);
 
         // Restore Sole Archived
@@ -306,7 +349,6 @@ void main() {
 
         // Must automatically return to active view
         expect(find.text('DeepList'), findsOneWidget);
-        expect(find.text('DeepList · 已归档'), findsNothing);
         expect(find.text('Active Node'), findsOneWidget);
         expect(find.text('Sole Archived'), findsOneWidget);
 

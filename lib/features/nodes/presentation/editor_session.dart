@@ -27,8 +27,12 @@ class EditorSession {
       _ownsEditing = editing == null;
 
   NodeId? get activeNodeId => _disposed ? null : editing.value.editingNodeId;
-  bool get isSelectingDueDate => editing.value.isSelectingDueDate;
-  set isSelectingDueDate(bool active) => editing.selectDueDate(active);
+  bool get isSelectingDueDate => !_disposed && editing.value.isSelectingDueDate;
+  set isSelectingDueDate(bool active) {
+    if (_disposed) return;
+    editing.selectDueDate(active);
+  }
+
   NodeId? _pendingFocusNodeId;
   int? _pendingCursor;
   int _focusGeneration = 0;
@@ -153,11 +157,12 @@ class EditorSession {
   }
 
   void unfocus() {
+    if (_disposed) return;
     // Clear the active editor before unfocusing its FocusNode. This lets the
     // card distinguish an explicit session shutdown from an ordinary blur and
     // avoids committing the same text a second time during navigation.
     _focusGeneration++;
-    if (!_disposed) editing.endEditing();
+    editing.endEditing();
     _pendingFocusNodeId = null;
     _pendingCursor = null;
     _clearHandover();
@@ -175,8 +180,8 @@ class EditorSession {
 
   void dispose() {
     if (_disposed) return;
-    _disposed = true;
     unfocus();
+    _disposed = true;
     _registrations.clear();
     if (_ownsEditing) editing.dispose();
   }

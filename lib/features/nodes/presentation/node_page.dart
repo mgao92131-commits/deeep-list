@@ -34,6 +34,7 @@ class NodePage extends ConsumerStatefulWidget {
 
 class _NodePageState extends ConsumerState<NodePage> {
   late final NodeEditingCoordinator _coordinator;
+  late final NodePageController _pageController;
   late final NodeActionsController _actions;
   late final NodeListController _list;
   late final EditorLifecycle _lifecycle;
@@ -44,12 +45,13 @@ class _NodePageState extends ConsumerState<NodePage> {
   @override
   void initState() {
     super.initState();
+    _pageController = ref.read(
+      nodePageControllerProvider(widget.parentId).notifier,
+    );
     _coordinator = NodeEditingCoordinator(
       treeCommandService: ref.read(treeCommandServiceProvider),
       onError: _showMutationError,
-      editing: ref
-          .read(nodePageControllerProvider(widget.parentId).notifier)
-          .editing,
+      editing: _pageController.editing,
     );
     _actions = NodeActionsController(
       editor: _coordinator,
@@ -86,6 +88,7 @@ class _NodePageState extends ConsumerState<NodePage> {
     _lifecycle.dispose();
     _list.removeListener(_listChanged);
     _list.dispose();
+    _pageController.detachEditingSync();
     _coordinator.dispose();
     super.dispose();
   }
@@ -196,9 +199,6 @@ class _NodePageState extends ConsumerState<NodePage> {
     });
 
     final baseTitle = isRoot ? 'DeepList' : parent?.content ?? '';
-    final displayTitle = archiveView == ArchiveView.archived
-        ? '$baseTitle · 已归档'
-        : baseTitle;
 
     return PopScope<void>(
       canPop: isNormal,
@@ -219,7 +219,7 @@ class _NodePageState extends ConsumerState<NodePage> {
                   onPressed: () => unawaited(_handleBack()),
                 ),
           title: Text(
-            displayTitle,
+            baseTitle,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),

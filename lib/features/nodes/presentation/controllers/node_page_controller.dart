@@ -11,16 +11,22 @@ typedef NodePageState = EditingState;
 @riverpod
 class NodePageController extends _$NodePageController {
   late EditingController editing;
+  late final void Function() _syncEditing;
+
   @override
   NodePageState build(NodeId? parentId) {
     editing = EditingController();
-    void sync() => state = editing.value;
-    editing.addListener(sync);
+    _syncEditing = () => state = editing.value;
+    editing.addListener(_syncEditing);
     ref.onDispose(() {
-      editing.removeListener(sync);
+      editing.removeListener(_syncEditing);
       editing.dispose();
     });
     return editing.value;
+  }
+
+  void detachEditingSync() {
+    editing.removeListener(_syncEditing);
   }
 
   void startEditing(NodeId nodeId) {

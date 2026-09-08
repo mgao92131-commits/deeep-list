@@ -30,7 +30,7 @@ void main() {
         copyToClipboard: (_) {},
         clearClipboard: () {},
       );
-      editor.editing.startEditing(node.id);
+      editor.editorSession.focus(node.id);
       expect(
         await actions.toggleDone((await repo.getNode(node.id))!),
         type != null,

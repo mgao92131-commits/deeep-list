@@ -75,4 +75,109 @@ void main() {
     focus.dispose();
     text.dispose();
   });
+
+  testWidgets('Session 统一负责 focus、handoverFocus 与 unfocus 的编辑状态变化', (
+    tester,
+  ) async {
+    final editing = EditingController();
+    final session = EditorSession(editing: editing);
+    final focusA = FocusNode();
+    final focusB = FocusNode();
+    final textA = TextEditingController(text: 'A');
+    final textB = TextEditingController(text: 'B');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              TextField(focusNode: focusA, controller: textA),
+              TextField(focusNode: focusB, controller: textB),
+            ],
+          ),
+        ),
+      ),
+    );
+    session.register(
+      nodeId: 'a',
+      focusNode: focusA,
+      controller: textA,
+      commit: (_) async {},
+    );
+    session.register(
+      nodeId: 'b',
+      focusNode: focusB,
+      controller: textB,
+      commit: (_) async {},
+    );
+
+    session.focus('a');
+    await tester.pump();
+    expect(editing.value.editingNodeId, 'a');
+    expect(focusA.hasFocus, isTrue);
+
+    session.handoverFocus('a', 'b');
+    await tester.pump();
+    expect(editing.value.editingNodeId, 'b');
+    expect(focusB.hasFocus, isTrue);
+
+    session.unfocus();
+    await tester.pump();
+    expect(editing.value.isNormal, isTrue);
+    expect(focusB.hasFocus, isFalse);
+
+    session.dispose();
+    editing.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+    focusA.dispose();
+    focusB.dispose();
+    textA.dispose();
+    textB.dispose();
+  });
+
+  testWidgets('dispose 会先结束外部 EditingController 并清理焦点状态', (tester) async {
+    final editing = EditingController();
+    final session = EditorSession(editing: editing);
+    final focus = FocusNode();
+    final text = TextEditingController(text: 'A');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TextField(focusNode: focus, controller: text),
+        ),
+      ),
+    );
+    session.register(
+      nodeId: 'a',
+      focusNode: focus,
+      controller: text,
+      commit: (_) async {},
+    );
+    session.focus('a');
+    await tester.pump();
+    session.handoverFocus('a', 'pending');
+    expect(editing.value.editingNodeId, 'pending');
+    expect(session.hasPendingFocus, isTrue);
+    expect(session.isHandingOver, isTrue);
+
+    session.dispose();
+    await tester.pump();
+
+    expect(editing.value.isNormal, isTrue);
+    expect(focus.hasFocus, isFalse);
+    expect(session.hasPendingFocus, isFalse);
+    expect(session.isHandingOver, isFalse);
+
+    editing.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+    focus.dispose();
+    text.dispose();
+  });
+
+  test('dispose 内部拥有的 EditingController 不抛异常且可重复调用', () {
+    final session = EditorSession();
+    session.focus('a');
+
+    expect(session.dispose, returnsNormally);
+    expect(session.dispose, returnsNormally);
+  });
 }

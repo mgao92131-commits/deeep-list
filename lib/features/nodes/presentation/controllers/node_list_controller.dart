@@ -73,9 +73,6 @@ class NodeListController extends ChangeNotifier {
     if (node.isArchived) {
       await editor.commit(node.id, text);
       _editorSession.unfocus();
-      if (mounted) {
-        editor.editing.endEditing();
-      }
       return;
     }
 
@@ -90,9 +87,6 @@ class NodeListController extends ChangeNotifier {
       // 空节点按 Enter: 单一职责，先解焦退回 Normal 状态，再安全执行单次删除
       if (text.trim().isEmpty) {
         _editorSession.unfocus();
-        if (mounted) {
-          editor.editing.endEditing();
-        }
         await editor.deleteEmptyNode(node.id);
         return;
       }
@@ -108,7 +102,6 @@ class NodeListController extends ChangeNotifier {
       );
       if (newNode == null || !mounted) return;
 
-      editor.editing.startEditing(newNode.id);
       _editorSession.handoverFocus(node.id, newNode.id, cursor: 0);
 
       handoverScheduled = true;
@@ -141,14 +134,13 @@ class NodeListController extends ChangeNotifier {
       if (!mounted) return;
 
       if (previousItem != null) {
-        editor.editing.startEditing(previousItem.id);
         _editorSession.handoverFocus(
           node.id,
           previousItem.id,
           cursor: previousItem.node.content.length,
         );
       } else {
-        editor.editing.endEditing();
+        _editorSession.unfocus();
       }
     } finally {
       _editorSession.allowBlurCommit(node.id);
@@ -165,19 +157,12 @@ class NodeListController extends ChangeNotifier {
     final text = isEditingThis ? _editorSession.activeText : null;
     if (isEditingThis && text != null && text.trim().isEmpty) {
       _editorSession.unfocus();
-      if (mounted) {
-        editor.editing.endEditing();
-      }
       await editor.deleteEmptyNode(nodeId);
       return;
     }
 
     await editor.flushPendingEdit(commitCurrent: true);
     await _runMutation(() => commands.indentNode(nodeId));
-    if (mounted) {
-      _editorSession.unfocus();
-      editor.editing.endEditing();
-    }
   }
 
   // Spec 23-24: Swipe Left -> Outdent
@@ -189,19 +174,12 @@ class NodeListController extends ChangeNotifier {
     final text = isEditingThis ? _editorSession.activeText : null;
     if (isEditingThis && text != null && text.trim().isEmpty) {
       _editorSession.unfocus();
-      if (mounted) {
-        editor.editing.endEditing();
-      }
       await editor.deleteEmptyNode(nodeId);
       return;
     }
 
     await editor.flushPendingEdit(commitCurrent: true);
     await _runMutation(() => commands.outdentNode(nodeId));
-    if (mounted) {
-      _editorSession.unfocus();
-      editor.editing.endEditing();
-    }
   }
 
   // Spec 31-32: Sibling Reorder Only
@@ -251,7 +229,6 @@ class NodeListController extends ChangeNotifier {
         () => commands.createNode(parentId: parentId, content: ''),
       );
       if (node == null || !mounted) return;
-      editor.editing.startEditing(node.id);
       _editorSession.handoverFocus(currentEditingId, node.id, cursor: 0);
       return;
     }
@@ -260,7 +237,6 @@ class NodeListController extends ChangeNotifier {
       () => commands.createNode(parentId: parentId, content: ''),
     );
     if (node == null || !mounted) return;
-    editor.editing.startEditing(node.id);
     _editorSession.focus(node.id, cursor: 0);
   }
 }
