@@ -2,24 +2,26 @@ import 'dart:async';
 
 import '../../application/tree_command_service.dart';
 import '../../domain/node.dart';
+import '../../domain/node_failure.dart';
 import '../../domain/node_id.dart';
 import '../editor_session.dart';
+import 'editing_controller.dart';
+import 'editor_keyboard_policy.dart';
 
 class NodeEditingCoordinator {
   final TreeCommandService treeCommandService;
   final EditorSession editorSession;
   final void Function(Object error) onError;
-  final NodeId? Function()? activeNodeIdProvider;
-  final void Function(NodeId nodeId)? onEditingStarted;
-  final void Function()? onEditingEnded;
 
   final _mutationQueue = _MutationQueue();
   Timer? _autosaveTimer;
   NodeId? _pendingAutosaveNodeId;
   String? _pendingAutosaveText;
   Future<bool>? _autosaveInFlight;
-  double lastBottomInset = 0.0;
-  int? keyboardSessionGeneration;
+  late final _keyboard = EditorKeyboardPolicy(
+    editorSession,
+    () => isHandlingEnter,
+  );
   bool isHandlingEnter = false;
 
   static const _autosaveDelay = Duration(milliseconds: 400);
@@ -28,13 +30,11 @@ class NodeEditingCoordinator {
     required this.treeCommandService,
     EditorSession? editorSession,
     required this.onError,
-    this.activeNodeIdProvider,
-    this.onEditingStarted,
-    this.onEditingEnded,
-  }) : editorSession = editorSession ?? EditorSession();
+    EditingController? editing,
+  }) : editorSession = editorSession ?? EditorSession(editing: editing);
 
-  NodeId? get activeNodeId =>
-      activeNodeIdProvider?.call() ?? editorSession.activeNodeId;
+  EditingController get editing => editorSession.editing;
+  NodeId? get activeNodeId => editing.value.editingNodeId;
 
   Future<void> get idleQueue => _mutationQueue.idle;
 
@@ -42,12 +42,7 @@ class NodeEditingCoordinator {
     return _mutationQueue.add(mutation);
   }
 
-  void initBottomInset(double inset) {
-    lastBottomInset = inset;
-    if (inset > 0) {
-      keyboardSessionGeneration = editorSession.focusGeneration;
-    }
-  }
+  void initBottomInset(double inset) => _keyboard.initBottomInset(inset);
 
   void scheduleAutosave(NodeId nodeId, String text) {
     _pendingAutosaveNodeId = nodeId;
@@ -78,7 +73,9 @@ class NodeEditingCoordinator {
   Future<bool> saveContent(NodeId nodeId, String text) async {
     try {
       await _mutationQueue.add(
-        () => treeCommandService.updateContent(nodeId, text),
+        () => editing.saving(
+          () => treeCommandService.updateContent(nodeId, text),
+        ),
       );
       return true;
     } catch (error) {
@@ -98,7 +95,6 @@ class NodeEditingCoordinator {
     if (text.trim().isEmpty) {
       await deleteEmptyNode(nodeId);
       editorSession.unfocus();
-      onEditingEnded?.call();
       return;
     }
 
@@ -167,7 +163,7 @@ class NodeEditingCoordinator {
         await flushPendingEdit(commitCurrent: true, unfocus: false);
       }
 
-      onEditingStarted?.call(node.id);
+      editing.startEditing(node.id);
       editorSession.handoverFocus(
         currentEditingId,
         node.id,
@@ -176,7 +172,7 @@ class NodeEditingCoordinator {
       return;
     }
 
-    onEditingStarted?.call(node.id);
+    editing.startEditing(node.id);
     editorSession.focus(node.id, cursor: node.content.length);
   }
 
@@ -200,13 +196,11 @@ class NodeEditingCoordinator {
           editorSession.allowBlurCommit(activeId);
         }
         editorSession.unfocus();
-        onEditingEnded?.call();
         return true;
       }
     }
 
     final saved = await flushPendingEdit(commitCurrent: true);
-    onEditingEnded?.call();
     return saved;
   }
 
@@ -219,7 +213,7 @@ class NodeEditingCoordinator {
     try {
       await _mutationQueue.add(() => treeCommandService.deleteSubtree(nodeId));
     } catch (error) {
-      if (error is! StateError || !error.message.contains('does not exist')) {
+      if (error is! NodeNotFound) {
         onError(error);
       }
     } finally {
@@ -231,43 +225,12 @@ class NodeEditingCoordinator {
     required double bottomInset,
     required bool isCurrentlyEditing,
   }) {
-    final keyboardWasVisible = lastBottomInset > 0;
-    final keyboardIsVisible = bottomInset > 0;
-
-    if (keyboardIsVisible) {
-      keyboardSessionGeneration = editorSession.focusGeneration;
+    if (_keyboard.shouldFinishEditing(
+      bottomInset: bottomInset,
+      isCurrentlyEditing: isCurrentlyEditing,
+    )) {
+      unawaited(finishActiveEditing());
     }
-
-    if (editorSession.hasPendingFocus || editorSession.isSelectingDueDate) {
-      lastBottomInset = bottomInset;
-      return;
-    }
-
-    if (keyboardWasVisible && !keyboardIsVisible) {
-      if (editorSession.isHandingOver || isHandlingEnter) {
-        lastBottomInset = bottomInset;
-        return;
-      }
-
-      final editingId = activeNodeId;
-      final isSameGeneration =
-          keyboardSessionGeneration == null ||
-          keyboardSessionGeneration == editorSession.focusGeneration;
-
-      final shouldFinish =
-          !isHandlingEnter &&
-          !editorSession.isHandingOver &&
-          !editorSession.hasPendingFocus &&
-          editingId != null &&
-          !editorSession.isFocused(editingId) &&
-          isSameGeneration;
-
-      if (shouldFinish && isCurrentlyEditing) {
-        unawaited(finishActiveEditing(discardIfEmpty: true));
-      }
-    }
-
-    lastBottomInset = bottomInset;
   }
 
   void handleLifecyclePause() {

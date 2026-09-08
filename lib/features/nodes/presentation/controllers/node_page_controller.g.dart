@@ -59,7 +59,7 @@ final class NodePageControllerProvider
 }
 
 String _$nodePageControllerHash() =>
-    r'70c4f148f433ba62631e8d7c57c755f266426b64';
+    r'b5d98e7936dc1121de8ac9e91e25219267d8d293';
 
 final class NodePageControllerFamily extends $Family
     with

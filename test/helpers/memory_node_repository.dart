@@ -112,6 +112,15 @@ class MemoryNodeRepository implements TreeMutationRepository {
   }
 
   Duration? transactionDelay;
+  @override
+  Stream<Map<NodeId, List<Node>>> watchAncestorPaths(List<NodeId> ids) async* {
+    Future<Map<NodeId, List<Node>>> read() async => {
+      for (final id in ids) id: await getAncestors(id),
+    };
+    yield await read();
+    yield* _changes.stream.asyncMap((_) => read());
+  }
+
   bool throwOnWrite = false;
 
   @override

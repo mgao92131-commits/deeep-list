@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:deep_list/features/nodes/application/tree_command_service.dart';
 import 'package:deep_list/features/nodes/domain/node.dart';
+import 'package:deep_list/features/nodes/domain/node_failure.dart';
 import 'package:deep_list/features/nodes/domain/tree_rules.dart';
 
 import '../helpers/memory_node_repository.dart';
@@ -174,7 +175,13 @@ void main() {
         newParentId: 'missing-parent',
         newPosition: 0,
       ),
-      throwsStateError,
+      throwsA(
+        isA<NodeNotFound>().having(
+          (error) => error.nodeId,
+          'nodeId',
+          'missing-parent',
+        ),
+      ),
     );
 
     final siblings = await harness.repository.getChildren(null);

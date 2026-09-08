@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/time/today_provider.dart';
 
 import '../editor_session.dart';
 import '../models/visible_node_item.dart';
 
-class NodeRow extends StatefulWidget {
+class NodeRow extends ConsumerStatefulWidget {
   final VisibleNodeItem item;
   final bool isEditing;
   final EditorSession editorSession;
@@ -39,10 +41,11 @@ class NodeRow extends StatefulWidget {
   });
 
   @override
-  State<NodeRow> createState() => _NodeRowState();
+  ConsumerState<NodeRow> createState() => _NodeRowState();
 }
 
-class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
+class _NodeRowState extends ConsumerState<NodeRow>
+    with SingleTickerProviderStateMixin {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
   late final AnimationController _springController;
@@ -474,14 +477,13 @@ class _NodeRowState extends State<NodeRow> with SingleTickerProviderStateMixin {
   _NodeRowDueDateInfo? _formatDueDate(DateTime? dueDate, ThemeData theme) {
     if (dueDate == null) return null;
 
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
+    final today = ref.watch(todayProvider);
+    final tomorrow = DateTime(today.year, today.month, today.day + 1);
     final date = DateTime(dueDate.year, dueDate.month, dueDate.day);
 
     if (date.isBefore(today)) {
       final isYesterday = date.isAtSameMomentAs(
-        today.subtract(const Duration(days: 1)),
+        DateTime(today.year, today.month, today.day - 1),
       );
       final label = isYesterday
           ? '昨天 (已逾期)'

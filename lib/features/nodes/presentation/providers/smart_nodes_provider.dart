@@ -1,11 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../app/providers.dart';
+import '../../providers.dart';
+import '../../../../core/time/today_provider.dart';
 import '../../domain/node.dart';
+import '../../application/smart_list_query.dart';
+export '../../application/smart_list_query.dart' show SmartListType;
 import '../../domain/node_id.dart';
 import '../models/visible_node_item.dart';
-
-enum SmartListType { today, favorites, dueDates }
 
 class SmartNodeGroup {
   final String? title;
@@ -19,11 +20,6 @@ class SmartNodeGroup {
   });
 }
 
-DateTime get _localToday {
-  final now = DateTime.now();
-  return DateTime(now.year, now.month, now.day);
-}
-
 final favoritesNodesStreamProvider = StreamProvider.autoDispose<List<Node>>((
   ref,
 ) {
@@ -34,26 +30,35 @@ final dueNodesStreamProvider = StreamProvider.autoDispose<List<Node>>((ref) {
   return ref.watch(nodeRepositoryProvider).watchDueNodes();
 });
 
-final nodePathProvider = FutureProvider.autoDispose.family<String, Node>((
-  ref,
-  node,
-) async {
-  if (node.parentId == null) {
-    return 'DeepList';
-  }
-  final repository = ref.watch(nodeRepositoryProvider);
-  final ancestors = await repository.getAncestors(node.id);
-  if (ancestors.isEmpty) {
-    return 'DeepList';
-  }
+final smartNodePathsProvider = StreamProvider.autoDispose
+    .family<Map<NodeId, String>, SmartListType>((ref, type) {
+      final groups =
+          ref.watch(smartNodesProvider(type)).value ?? const <SmartNodeGroup>[];
+      final ids = [
+        for (final group in groups)
+          for (final item in group.items) item.id,
+      ];
+      return ref
+          .watch(nodeRepositoryProvider)
+          .watchAncestorPaths(ids)
+          .map(
+            (paths) => {
+              for (final entry in paths.entries)
+                entry.key: _formatPath(entry.value),
+            },
+          );
+    });
+
+String _formatPath(List<Node> ancestors) {
+  if (ancestors.isEmpty) return 'DeepList';
   final names = ancestors
-      .map((a) => a.content.trim().isEmpty ? '未命名' : a.content.trim())
+      .map((node) => node.content.trim().isEmpty ? '未命名' : node.content.trim())
       .toList();
   if (names.length > 2) {
     return '… › ${names.sublist(names.length - 2).join(' › ')}';
   }
   return 'DeepList › ${names.join(' › ')}';
-});
+}
 
 List<SmartNodeGroup> buildSmartGroups({
   required SmartListType type,
@@ -61,114 +66,45 @@ List<SmartNodeGroup> buildSmartGroups({
   required DateTime today,
   Map<NodeId, int> counts = const {},
 }) {
-  final normalizedToday = Node.normalizeDate(today)!;
-  final tomorrow = normalizedToday.add(const Duration(days: 1));
-
-  switch (type) {
-    case SmartListType.favorites:
-      if (nodes.isEmpty) return const [];
-      final items = <VisibleNodeItem>[];
-      for (var i = 0; i < nodes.length; i++) {
-        final node = nodes[i];
-        items.add(
-          VisibleNodeItem(
-            node: node,
-            parentId: node.parentId,
-            hasPreviousSibling: i > 0,
-            previousSiblingId: i > 0 ? nodes[i - 1].id : null,
-            isLastInParent: i == nodes.length - 1,
-            childCount: counts[node.id] ?? 0,
-          ),
-        );
-      }
-      return [SmartNodeGroup(title: null, items: items)];
-
-    case SmartListType.today:
-      final overdueItems = <VisibleNodeItem>[];
-      final todayItems = <VisibleNodeItem>[];
-
-      for (final node in nodes) {
-        final normalized = Node.normalizeDate(node.dueDate);
-        if (normalized == null) continue;
-        if (normalized.isAfter(normalizedToday)) continue;
-
-        final item = VisibleNodeItem(
-          node: node,
-          parentId: node.parentId,
-          hasPreviousSibling: false,
-          childCount: counts[node.id] ?? 0,
-        );
-        if (normalized.isBefore(normalizedToday)) {
-          overdueItems.add(item);
-        } else {
-          todayItems.add(item);
-        }
-      }
-
-      final groups = <SmartNodeGroup>[];
-      if (overdueItems.isNotEmpty) {
-        groups.add(
-          SmartNodeGroup(title: '已逾期', items: overdueItems, isOverdue: true),
-        );
-      }
-      if (todayItems.isNotEmpty) {
-        groups.add(
-          SmartNodeGroup(title: '今天', items: todayItems, isOverdue: false),
-        );
-      }
-      return groups;
-
-    case SmartListType.dueDates:
-      final overdueItems = <VisibleNodeItem>[];
-      final todayItems = <VisibleNodeItem>[];
-      final tomorrowItems = <VisibleNodeItem>[];
-      final laterItems = <VisibleNodeItem>[];
-
-      for (final node in nodes) {
-        final normalized = Node.normalizeDate(node.dueDate);
-        if (normalized == null) continue;
-
-        final item = VisibleNodeItem(
-          node: node,
-          parentId: node.parentId,
-          hasPreviousSibling: false,
-          childCount: counts[node.id] ?? 0,
-        );
-
-        if (normalized.isBefore(normalizedToday)) {
-          overdueItems.add(item);
-        } else if (normalized.isAtSameMomentAs(normalizedToday)) {
-          todayItems.add(item);
-        } else if (normalized.isAtSameMomentAs(tomorrow)) {
-          tomorrowItems.add(item);
-        } else {
-          laterItems.add(item);
-        }
-      }
-
-      final groups = <SmartNodeGroup>[];
-      if (overdueItems.isNotEmpty) {
-        groups.add(
-          SmartNodeGroup(title: '已逾期', items: overdueItems, isOverdue: true),
-        );
-      }
-      if (todayItems.isNotEmpty) {
-        groups.add(
-          SmartNodeGroup(title: '今天', items: todayItems, isOverdue: false),
-        );
-      }
-      if (tomorrowItems.isNotEmpty) {
-        groups.add(
-          SmartNodeGroup(title: '明天', items: tomorrowItems, isOverdue: false),
-        );
-      }
-      if (laterItems.isNotEmpty) {
-        groups.add(
-          SmartNodeGroup(title: '以后', items: laterItems, isOverdue: false),
-        );
-      }
-      return groups;
+  final filtered = nodes
+      .where((node) => SmartListQuery.includes(type, node, today))
+      .toList();
+  List<VisibleNodeItem> items(List<Node> values) => [
+    for (var i = 0; i < values.length; i++)
+      VisibleNodeItem(
+        node: values[i],
+        parentId: values[i].parentId,
+        hasPreviousSibling: type == SmartListType.favorites && i > 0,
+        previousSiblingId: type == SmartListType.favorites && i > 0
+            ? values[i - 1].id
+            : null,
+        isLastInParent:
+            type == SmartListType.favorites && i == values.length - 1,
+        childCount: counts[values[i].id] ?? 0,
+      ),
+  ];
+  if (type == SmartListType.favorites) {
+    return filtered.isEmpty ? [] : [SmartNodeGroup(items: items(filtered))];
   }
+  const titles = {
+    SmartDateGroup.overdue: '已逾期',
+    SmartDateGroup.today: '今天',
+    SmartDateGroup.tomorrow: '明天',
+    SmartDateGroup.later: '以后',
+  };
+  final buckets = <SmartDateGroup, List<Node>>{};
+  for (final node in filtered) {
+    (buckets[SmartListQuery.dateGroup(node.dueDate!, today)] ??= []).add(node);
+  }
+  return [
+    for (final group in SmartDateGroup.values)
+      if (buckets[group]?.isNotEmpty ?? false)
+        SmartNodeGroup(
+          title: titles[group],
+          items: items(buckets[group]!),
+          isOverdue: group == SmartDateGroup.overdue,
+        ),
+  ];
 }
 
 final smartNodesProvider = Provider.autoDispose
@@ -179,12 +115,13 @@ final smartNodesProvider = Provider.autoDispose
         SmartListType.dueDates => ref.watch(dueNodesStreamProvider),
       };
       final counts = ref.watch(childCountsProvider).value ?? const {};
+      final today = ref.watch(todayProvider);
 
       return nodesAsync.whenData((nodes) {
         return buildSmartGroups(
           type: type,
           nodes: nodes,
-          today: _localToday,
+          today: today,
           counts: counts,
         );
       });

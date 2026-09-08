@@ -1,6 +1,6 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../domain/node_id.dart';
+import '../../domain/node_id.dart';
 
 part 'clipboard_controller.g.dart';
 

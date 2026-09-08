@@ -1,30 +1,12 @@
-import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import '../core/navigation/route_observer.dart';
 
 import '../features/nodes/presentation/node_page.dart';
 import '../features/nodes/presentation/providers/smart_nodes_provider.dart';
 import '../features/nodes/presentation/smart_node_page.dart';
 
 part 'router.g.dart';
-
-class AppRouteObserver extends RouteObserver<ModalRoute<void>> {
-  @override
-  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    if (route is! PopupRoute) {
-      super.didPush(route, previousRoute);
-    }
-  }
-
-  @override
-  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    if (route is! PopupRoute) {
-      super.didPop(route, previousRoute);
-    }
-  }
-}
-
-final routeObserver = AppRouteObserver();
 
 @Riverpod(keepAlive: true)
 GoRouter router(Ref ref) {

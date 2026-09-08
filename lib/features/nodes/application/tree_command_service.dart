@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 
 import '../domain/node.dart';
+import '../domain/node_failure.dart';
 import '../domain/node_color.dart';
 import '../domain/node_id.dart';
 import '../domain/node_repository.dart';
@@ -271,7 +272,7 @@ class TreeCommandService {
       );
       final nodeIndex = siblings.indexWhere((sibling) => sibling.id == nodeId);
       if (nodeIndex < 0) {
-        throw StateError('Node $nodeId is not a child of its parent.');
+        throw InvalidNodeParent(nodeId);
       }
 
       final now = _clock();
@@ -492,7 +493,7 @@ class TreeCommandService {
   Future<Node> _requireNode(TreeTransaction transaction, NodeId nodeId) async {
     final node = await transaction.getNode(nodeId);
     if (node == null) {
-      throw StateError('Node $nodeId does not exist.');
+      throw NodeNotFound(nodeId);
     }
     return node;
   }
@@ -527,7 +528,7 @@ class TreeCommandService {
 
   void _ensureEditable(Node node) {
     if (node.isArchived) {
-      throw StateError('Archived nodes cannot be edited.');
+      throw ArchivedNode(node.id);
     }
   }
 

@@ -134,6 +134,45 @@ class DriftNodeRepository implements TreeMutationRepository {
     );
   }
 
+  @override
+  Stream<Map<NodeId, List<domain.Node>>> watchAncestorPaths(
+    List<NodeId> nodeIds,
+  ) {
+    final ids = nodeIds.toSet().toList(growable: false);
+    if (ids.isEmpty) return Stream.value(const {});
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final query = database.customSelect(
+      '''
+      WITH RECURSIVE ancestor_paths AS (
+        SELECT leaf.id AS path_node_id, parent.id AS ancestor_id,
+          parent.parent_id AS next_parent_id, 0 AS depth,
+          '|' || leaf.id || '|' || parent.id || '|' AS visited
+        FROM nodes leaf JOIN nodes parent ON parent.id = leaf.parent_id
+        WHERE leaf.id IN ($placeholders) AND leaf.id <> parent.id
+        UNION ALL
+        SELECT a.path_node_id, p.id, p.parent_id, a.depth + 1,
+          a.visited || p.id || '|'
+        FROM ancestor_paths a JOIN nodes p ON p.id = a.next_parent_id
+        WHERE instr(a.visited, '|' || p.id || '|') = 0
+      )
+      SELECT a.path_node_id, n.* FROM ancestor_paths a
+      JOIN nodes n ON n.id = a.ancestor_id
+      ORDER BY a.path_node_id, a.depth DESC
+    ''',
+      variables: ids.map(Variable.withString).toList(),
+      readsFrom: {database.nodes},
+    );
+    return query.watch().map((rows) {
+      final paths = <NodeId, List<domain.Node>>{for (final id in ids) id: []};
+      for (final row in rows) {
+        paths[row.read<String>('path_node_id')]!.add(
+          _toDomain(database.nodes.map(row.data)),
+        );
+      }
+      return paths;
+    });
+  }
+
   SimpleSelectStatement<db.$NodesTable, db.Node> _selectNode(NodeId id) {
     return database.select(database.nodes)
       ..where((table) => table.id.equals(id));

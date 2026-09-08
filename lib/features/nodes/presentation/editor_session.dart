@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../domain/node_id.dart';
+import 'controllers/editing_controller.dart';
 
 typedef EditorCommit = Future<void> Function(String text);
 
@@ -19,8 +20,15 @@ class _EditorRegistration {
 class EditorSession {
   final Map<NodeId, _EditorRegistration> _registrations = {};
   final Set<NodeId> _blurCommitSuppressed = {};
-  NodeId? activeNodeId;
-  bool isSelectingDueDate = false;
+  final EditingController editing;
+  final bool _ownsEditing;
+  EditorSession({EditingController? editing})
+    : editing = editing ?? EditingController(),
+      _ownsEditing = editing == null;
+
+  NodeId? get activeNodeId => _disposed ? null : editing.value.editingNodeId;
+  bool get isSelectingDueDate => editing.value.isSelectingDueDate;
+  set isSelectingDueDate(bool active) => editing.selectDueDate(active);
   NodeId? _pendingFocusNodeId;
   int? _pendingCursor;
   int _focusGeneration = 0;
@@ -71,9 +79,6 @@ class EditorSession {
 
   void unregister(NodeId nodeId) {
     _registrations.remove(nodeId);
-    if (activeNodeId == nodeId) {
-      activeNodeId = null;
-    }
     if (_pendingFocusNodeId == nodeId) {
       _pendingFocusNodeId = null;
       _pendingCursor = null;
@@ -85,7 +90,7 @@ class EditorSession {
 
   void markActive(NodeId nodeId) {
     if (_registrations.containsKey(nodeId)) {
-      activeNodeId = nodeId;
+      if (activeNodeId != nodeId) return;
       if (_handoverTo == nodeId && isFocused(nodeId)) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_disposed) return;
@@ -119,6 +124,7 @@ class EditorSession {
 
   void focus(NodeId nodeId, {int? cursor}) {
     if (_disposed) return;
+    editing.startEditing(nodeId);
     _focusGeneration++;
     _pendingFocusNodeId = nodeId;
     _pendingCursor = cursor;
@@ -127,6 +133,7 @@ class EditorSession {
 
   void handoverFocus(NodeId from, NodeId to, {int? cursor}) {
     if (_disposed) return;
+    editing.startEditing(to);
     _focusGeneration++;
     final generation = _focusGeneration;
     _handoverFrom = from;
@@ -138,7 +145,6 @@ class EditorSession {
     if (toRegistration != null) {
       _pendingFocusNodeId = null;
       _pendingCursor = null;
-      activeNodeId = to;
       _requestFocusAndVerify(to, toRegistration, cursor, generation);
     } else {
       _schedulePendingFocus();
@@ -151,7 +157,7 @@ class EditorSession {
     // card distinguish an explicit session shutdown from an ordinary blur and
     // avoids committing the same text a second time during navigation.
     _focusGeneration++;
-    activeNodeId = null;
+    if (!_disposed) editing.endEditing();
     _pendingFocusNodeId = null;
     _pendingCursor = null;
     _clearHandover();
@@ -172,6 +178,7 @@ class EditorSession {
     _disposed = true;
     unfocus();
     _registrations.clear();
+    if (_ownsEditing) editing.dispose();
   }
 
   void _applyCursor(NodeId nodeId, int? cursor) {
@@ -220,7 +227,7 @@ class EditorSession {
       final cursor = _pendingCursor;
       _pendingFocusNodeId = null;
       _pendingCursor = null;
-      activeNodeId = nodeId;
+      if (activeNodeId != nodeId) return;
       _requestFocusAndVerify(nodeId, registration, cursor, generation);
     });
   }

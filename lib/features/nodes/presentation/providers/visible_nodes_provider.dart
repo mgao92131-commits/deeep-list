@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../app/providers.dart';
+import '../../providers.dart';
 import '../../domain/node.dart';
 import '../../domain/node_id.dart';
 import '../models/visible_node_item.dart';

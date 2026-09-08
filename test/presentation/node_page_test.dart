@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:deep_list/app/app.dart';
 import 'package:deep_list/app/providers.dart';
-import 'package:deep_list/features/nodes/application/node_page_controller.dart';
+import 'package:deep_list/features/nodes/presentation/controllers/node_page_controller.dart';
 import 'package:deep_list/features/nodes/application/tree_command_service.dart';
 import 'package:deep_list/features/nodes/presentation/widgets/node_row.dart';
 

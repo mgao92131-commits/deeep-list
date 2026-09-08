@@ -4,13 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../app/providers.dart';
-import '../../../app/router.dart';
-import '../application/clipboard_controller.dart';
+import '../providers.dart';
+import 'controllers/editor_lifecycle.dart';
+import '../../../core/time/today_provider.dart';
+import '../presentation/controllers/clipboard_controller.dart';
 import '../domain/node.dart';
-import '../domain/node_color.dart';
 import '../domain/node_id.dart';
 import 'controllers/node_editing_coordinator.dart';
+import 'controllers/node_actions_controller.dart';
 import 'editor_session.dart';
 import 'models/visible_node_item.dart';
 import 'providers/smart_nodes_provider.dart';
@@ -27,11 +28,11 @@ class SmartNodePage extends ConsumerStatefulWidget {
   ConsumerState<SmartNodePage> createState() => _SmartNodePageState();
 }
 
-class _SmartNodePageState extends ConsumerState<SmartNodePage>
-    with RouteAware, WidgetsBindingObserver {
+class _SmartNodePageState extends ConsumerState<SmartNodePage> {
   late final NodeEditingCoordinator _coordinator;
-  NodeId? _editingNodeId;
-  bool _routeSubscribed = false;
+  late final NodeActionsController _actions;
+  NodeId? get _editingNodeId => _coordinator.editing.value.editingNodeId;
+  late final EditorLifecycle _lifecycle;
 
   EditorSession get _editorSession => _coordinator.editorSession;
 
@@ -41,91 +42,39 @@ class _SmartNodePageState extends ConsumerState<SmartNodePage>
     _coordinator = NodeEditingCoordinator(
       treeCommandService: ref.read(treeCommandServiceProvider),
       onError: _showMutationError,
-      activeNodeIdProvider: () => _editingNodeId,
-      onEditingStarted: (nodeId) {
-        if (!mounted) return;
-        setState(() {
-          _editingNodeId = nodeId;
-        });
-      },
-      onEditingEnded: () {
-        if (!mounted) return;
-        setState(() {
-          _editingNodeId = null;
-        });
-      },
     );
-    WidgetsBinding.instance.addObserver(this);
+    _coordinator.editing.addListener(_editingChanged);
+    _actions = NodeActionsController(
+      editor: _coordinator,
+      commands: ref.read(treeCommandServiceProvider),
+      smartList: widget.type,
+      today: () => ref.read(todayProvider),
+      onError: _showMutationError,
+      clipboard: () => ref.read(clipboardControllerProvider),
+      copyToClipboard: (id) =>
+          ref.read(clipboardControllerProvider.notifier).copy(id),
+      clearClipboard: () =>
+          ref.read(clipboardControllerProvider.notifier).clear(),
+    );
+    _lifecycle = EditorLifecycle(_coordinator);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final view =
-        View.maybeOf(context) ??
-        WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
-    if (view != null) {
-      final bottomInset = view.viewInsets.bottom / view.devicePixelRatio;
-      _coordinator.initBottomInset(bottomInset);
-    }
-    if (_routeSubscribed) return;
-    final route = ModalRoute.of(context);
-    if (route is PageRoute<dynamic>) {
-      routeObserver.subscribe(this, route);
-      _routeSubscribed = true;
-    }
-  }
-
-  @override
-  void didPushNext() {
-    unawaited(_coordinator.finishActiveEditing(discardIfEmpty: true));
-  }
-
-  @override
-  void didPop() {
-    unawaited(_coordinator.finishActiveEditing(discardIfEmpty: true));
-  }
-
-  @override
-  void didPopNext() {
-    unawaited(_coordinator.finishActiveEditing(discardIfEmpty: true));
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden ||
-        state == AppLifecycleState.detached) {
-      _coordinator.handleLifecyclePause();
-    }
-  }
-
-  @override
-  void didChangeMetrics() {
-    super.didChangeMetrics();
-    final view =
-        View.maybeOf(context) ??
-        WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
-    if (view == null) return;
-
-    final bottomInset = view.viewInsets.bottom / view.devicePixelRatio;
-    if (mounted) {
-      _coordinator.handleMetricsChange(
-        bottomInset: bottomInset,
-        isCurrentlyEditing: _editingNodeId != null,
-      );
-    }
+    _lifecycle.attach(context);
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    if (_routeSubscribed) {
-      routeObserver.unsubscribe(this);
-    }
+    _lifecycle.dispose();
+    _coordinator.editing.removeListener(_editingChanged);
     _coordinator.dispose();
     super.dispose();
+  }
+
+  void _editingChanged() {
+    if (mounted) setState(() {});
   }
 
   String get _pageTitle {
@@ -157,137 +106,30 @@ class _SmartNodePageState extends ConsumerState<SmartNodePage>
     );
   }
 
-  bool _wouldLeaveList({
-    required Node node,
-    bool? isDone,
-    bool? isFavorite,
-    DateTime? Function()? dueDate,
-  }) {
-    final nextIsDone = isDone ?? node.isDone;
-    if (nextIsDone) return true;
-
-    switch (widget.type) {
-      case SmartListType.favorites:
-        final nextIsFavorite = isFavorite ?? node.isFavorite;
-        return !nextIsFavorite;
-
-      case SmartListType.today:
-        final nextDueDate = dueDate != null ? dueDate() : node.dueDate;
-        if (nextDueDate == null) return true;
-        final now = DateTime.now();
-        final localToday = DateTime(now.year, now.month, now.day);
-        final normalized = Node.normalizeDate(nextDueDate);
-        if (normalized == null) return true;
-        return normalized.isAfter(localToday);
-
-      case SmartListType.dueDates:
-        final nextDueDate = dueDate != null ? dueDate() : node.dueDate;
-        return nextDueDate == null;
-    }
-  }
-
   void _restoreFocus(NodeId nodeId) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _editingNodeId == nodeId) {
-        _editorSession.focus(nodeId);
-      }
-    });
+    if (_editingNodeId == nodeId) _editorSession.focus(nodeId);
   }
 
   Future<void> _handleToggleDone(Node node) async {
-    final leaves = _wouldLeaveList(node: node, isDone: !node.isDone);
-    if (leaves && _editingNodeId == node.id) {
-      await _coordinator.finishActiveEditing(discardIfEmpty: false);
-    }
-    try {
-      await _coordinator.runMutation(
-        () => ref.read(treeCommandServiceProvider).toggleDone(node.id),
-      );
-      if (!mounted || !leaves) return;
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(
-          content: const Text('已完成'),
-          action: SnackBarAction(
-            label: '撤销',
-            onPressed: () => unawaited(_undoDone(node.id)),
-          ),
+    final showUndo = await _actions.toggleDone(node);
+    if (!mounted || !showUndo) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('已完成'),
+        action: SnackBarAction(
+          label: '撤销',
+          onPressed: () => unawaited(_actions.undoDone(node.id)),
         ),
-      );
-    } catch (e) {
-      _showMutationError(e);
-    }
-  }
-
-  Future<void> _undoDone(NodeId nodeId) async {
-    if (!mounted) return;
-    try {
-      await _coordinator.runMutation(
-        () => ref.read(treeCommandServiceProvider).toggleDone(nodeId),
-      );
-    } catch (e) {
-      _showMutationError(e);
-    }
-  }
-
-  Future<void> _handleToggleFavorite(Node node) async {
-    final leaves = _wouldLeaveList(node: node, isFavorite: !node.isFavorite);
-    if (leaves && _editingNodeId == node.id) {
-      await _coordinator.finishActiveEditing(discardIfEmpty: false);
-    }
-    try {
-      await _coordinator.runMutation(
-        () => ref.read(treeCommandServiceProvider).toggleFavorite(node.id),
-      );
-      if (!leaves && _editingNodeId == node.id) {
-        _restoreFocus(node.id);
-      }
-    } catch (e) {
-      _showMutationError(e);
-    }
-  }
-
-  Future<void> _handleDueDateChanged(Node node, DateTime? newDate) async {
-    final leaves = _wouldLeaveList(node: node, dueDate: () => newDate);
-    if (leaves && _editingNodeId == node.id) {
-      await _coordinator.finishActiveEditing(discardIfEmpty: false);
-    }
-    try {
-      await _coordinator.runMutation(
-        () => ref
-            .read(treeCommandServiceProvider)
-            .updateDueDate(node.id, newDate),
-      );
-      if (!leaves && _editingNodeId == node.id) {
-        _restoreFocus(node.id);
-      }
-    } catch (e) {
-      _showMutationError(e);
-    }
-  }
-
-  Future<void> _handleColorSelected(Node node, NodeColor color) async {
-    try {
-      await _coordinator.runMutation(
-        () => ref.read(treeCommandServiceProvider).updateColor(node.id, color),
-      );
-    } catch (e) {
-      _showMutationError(e);
-    }
+      ),
+    );
   }
 
   Future<void> _openNode(Node node) async {
     await _coordinator.finishActiveEditing(discardIfEmpty: true);
     if (!mounted) return;
     context.push('/node/${node.id}');
-  }
-
-  Future<void> _copyNode(Node node) async {
-    if (_editingNodeId == node.id) {
-      await _coordinator.flushPendingEdit(commitCurrent: true, unfocus: false);
-    }
-    ref.read(clipboardControllerProvider.notifier).copy(node.id);
   }
 
   Future<void> _openActionMenu(Node node, Offset position) async {
@@ -299,41 +141,11 @@ class _SmartNodePageState extends ConsumerState<SmartNodePage>
       position: position,
       node: node,
       canPaste: canPaste,
-      onCopy: () => unawaited(_copyNode(node)),
+      onCopy: () => unawaited(_actions.copy(node)),
       onPaste: null,
-      onArchive: () async {
-        if (_editingNodeId == node.id) {
-          await _coordinator.finishActiveEditing(discardIfEmpty: false);
-        }
-        try {
-          await _coordinator.runMutation(
-            () => ref.read(treeCommandServiceProvider).archiveNode(node.id),
-          );
-        } catch (e) {
-          _showMutationError(e);
-        }
-      },
-      onRestore: () async {
-        try {
-          await _coordinator.runMutation(
-            () => ref.read(treeCommandServiceProvider).restoreNode(node.id),
-          );
-        } catch (e) {
-          _showMutationError(e);
-        }
-      },
-      onDelete: () async {
-        if (_editingNodeId == node.id) {
-          await _coordinator.finishActiveEditing(discardIfEmpty: false);
-        }
-        try {
-          await _coordinator.runMutation(
-            () => ref.read(treeCommandServiceProvider).deleteSubtree(node.id),
-          );
-        } catch (e) {
-          _showMutationError(e);
-        }
-      },
+      onArchive: () => _actions.archive(node),
+      onRestore: () => _actions.restore(node),
+      onDelete: () => _actions.delete(node),
     );
   }
 
@@ -436,8 +248,10 @@ class _SmartNodePageState extends ConsumerState<SmartNodePage>
                                 child: Consumer(
                                   builder: (context, ref, _) {
                                     final pathText = ref
-                                        .watch(nodePathProvider(item.node))
-                                        .value;
+                                        .watch(
+                                          smartNodePathsProvider(widget.type),
+                                        )
+                                        .value?[item.id];
                                     final displayItem = pathText != null
                                         ? item.copyWith(pathText: pathText)
                                         : item;
@@ -489,20 +303,21 @@ class _SmartNodePageState extends ConsumerState<SmartNodePage>
                 ),
                 if (_editingNodeId != null && activeItem != null)
                   KeyboardToolbar(
+                    today: ref.watch(todayProvider),
                     activeNodeId: activeItem.id,
                     currentColor: activeItem.node.color,
                     isDone: activeItem.isDone,
                     isFavorite: activeItem.node.isFavorite,
                     dueDate: activeItem.node.dueDate,
                     onColorSelected: (color) =>
-                        _handleColorSelected(activeItem.node, color),
+                        _actions.updateColor(activeItem.node, color),
                     onToggleDone: () => _handleToggleDone(activeItem.node),
                     onToggleFavorite: () =>
-                        _handleToggleFavorite(activeItem.node),
+                        _actions.toggleFavorite(activeItem.node),
                     onDueDateInteractionChanged: (active) =>
                         _editorSession.isSelectingDueDate = active,
                     onDueDateChanged: (date) =>
-                        _handleDueDateChanged(activeItem.node, date),
+                        _actions.updateDueDate(activeItem.node, date),
                     onRequestRestoreFocus: () => _restoreFocus(activeItem.id),
                   ),
               ],

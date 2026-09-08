@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:deep_list/app/providers.dart';
-import 'package:deep_list/features/nodes/application/node_page_controller.dart';
+import 'package:deep_list/features/nodes/presentation/controllers/node_page_controller.dart';
 
 import '../helpers/test_database.dart';
 
@@ -13,7 +13,10 @@ void main() {
   setUp(() {
     harness = TestDatabase();
     container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(harness.database)],
+      overrides: [
+        nodeRepositoryOverride,
+        databaseProvider.overrideWithValue(harness.database),
+      ],
     );
   });
 

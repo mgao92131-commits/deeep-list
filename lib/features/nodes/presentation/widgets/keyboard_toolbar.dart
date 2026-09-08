@@ -10,6 +10,7 @@ class KeyboardToolbar extends StatefulWidget {
   final bool isDone;
   final bool isFavorite;
   final DateTime? dueDate;
+  final DateTime? today;
   final ValueChanged<NodeColor>? onColorSelected;
   final VoidCallback? onToggleDone;
   final VoidCallback? onToggleFavorite;
@@ -24,6 +25,7 @@ class KeyboardToolbar extends StatefulWidget {
     this.isDone = false,
     this.isFavorite = false,
     this.dueDate,
+    this.today,
     this.onColorSelected,
     this.onToggleDone,
     this.onToggleFavorite,
@@ -147,13 +149,17 @@ class _KeyboardToolbarState extends State<KeyboardToolbar> {
   }
 
   Widget _buildDueDateButton(BuildContext context, ThemeData theme) {
-    final now = DateTime.now();
+    final now = widget.today ?? DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
+    final tomorrow = DateTime(today.year, today.month, today.day + 1);
     final daysUntilNextMonday = today.weekday == DateTime.monday
         ? 7
         : (8 - today.weekday);
-    final nextMonday = today.add(Duration(days: daysUntilNextMonday));
+    final nextMonday = DateTime(
+      today.year,
+      today.month,
+      today.day + daysUntilNextMonday,
+    );
 
     final hasDueDate = widget.dueDate != null;
     final currentDueDate = widget.dueDate != null

@@ -26,6 +26,8 @@ abstract interface class NodeRepository {
   Stream<List<Node>> watchDueNodes();
 
   Future<List<Node>> getAncestors(NodeId nodeId);
+
+  Stream<Map<NodeId, List<Node>>> watchAncestorPaths(List<NodeId> nodeIds);
 }
 
 /// Mutation-only persistence port used by [TreeCommandService].
