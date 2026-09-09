@@ -15,8 +15,9 @@ class ArchiveStatusBar extends StatelessWidget {
     final theme = Theme.of(context);
     return Container(
       key: const ValueKey('archive-status-bar'),
-      margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+      height: 48,
+      margin: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+      padding: const EdgeInsets.only(left: 12, right: 4),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(12),

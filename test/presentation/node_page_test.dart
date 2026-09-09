@@ -8,6 +8,7 @@ import 'package:deep_list/app/providers.dart';
 import 'package:deep_list/features/nodes/presentation/controllers/node_page_controller.dart';
 import 'package:deep_list/features/nodes/application/tree_command_service.dart';
 import 'package:deep_list/features/nodes/presentation/widgets/node_row.dart';
+import 'package:deep_list/features/nodes/presentation/widgets/smart_entries_bar.dart';
 
 import '../helpers/memory_node_repository.dart';
 
@@ -273,7 +274,7 @@ void main() {
       // Now selected, Chevron is visible
       await tester.tap(find.text('Edited Parent'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Open'));
+      await tester.tap(find.byIcon(Icons.chevron_right));
       await tester.pumpAndSettle();
 
       expect(find.text('Edited Parent'), findsOneWidget);
@@ -362,7 +363,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byType(AppBar),
-          matching: find.text('DeepList'),
+          matching: find.byType(SmartEntriesBar),
         ),
         findsOneWidget,
       );

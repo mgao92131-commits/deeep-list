@@ -8,6 +8,7 @@ import 'package:deep_list/app/providers.dart';
 import 'package:deep_list/features/nodes/presentation/controllers/clipboard_controller.dart';
 import 'package:deep_list/features/nodes/presentation/controllers/node_page_controller.dart';
 import 'package:deep_list/features/nodes/application/tree_command_service.dart';
+import 'package:deep_list/features/nodes/presentation/widgets/node_row.dart';
 
 import '../helpers/memory_node_repository.dart';
 
@@ -280,6 +281,84 @@ void main() {
       }
     },
   );
+
+  for (final trailingKind in ['数量', '箭头']) {
+    testWidgets('G2. 长按右侧$trailingKind后松手打开菜单且不导航', (tester) async {
+      final parent = await commands.createNode(
+        parentId: null,
+        content: 'Parent',
+      );
+      await commands.createNode(parentId: parent.id, content: 'Child');
+      await commands.createNode(parentId: null, content: 'Leaf');
+      await pumpApp(tester);
+
+      final row = find.ancestor(
+        of: find.text(trailingKind == '数量' ? 'Parent' : 'Leaf'),
+        matching: find.byType(NodeRow),
+      );
+      final trailing = trailingKind == '数量'
+          ? find.descendant(of: row, matching: find.text('1'))
+          : find.descendant(
+              of: row,
+              matching: find.byIcon(Icons.chevron_right),
+            );
+
+      expect(find.byTooltip('Open'), findsNothing);
+      final gesture = await tester.startGesture(tester.getCenter(trailing));
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(find.text('复制'), findsOneWidget);
+      expect(find.text('归档'), findsOneWidget);
+      expect(find.text('删除'), findsOneWidget);
+      expect(find.text('Child'), findsNothing);
+      expect(find.text('Parent'), findsOneWidget);
+      expect(find.text('Leaf'), findsOneWidget);
+    });
+
+    testWidgets('G3. 从右侧$trailingKind长按拖动会排序且不打开菜单或导航', (tester) async {
+      final dragged = await commands.createNode(
+        parentId: null,
+        content: 'Dragged',
+      );
+      if (trailingKind == '数量') {
+        await commands.createNode(parentId: dragged.id, content: 'Child');
+      }
+      await commands.createNode(parentId: null, content: 'Item 2');
+      await commands.createNode(parentId: null, content: 'Item 3');
+      await pumpApp(tester);
+
+      final row = find.ancestor(
+        of: find.text('Dragged'),
+        matching: find.byType(NodeRow),
+      );
+      final trailing = trailingKind == '数量'
+          ? find.descendant(of: row, matching: find.text('1'))
+          : find.descendant(
+              of: row,
+              matching: find.byIcon(Icons.chevron_right),
+            );
+
+      final gesture = await tester.startGesture(tester.getCenter(trailing));
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      await gesture.moveBy(const Offset(0, 120));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(find.text('复制'), findsNothing);
+      expect(find.text('删除'), findsNothing);
+      expect(find.text('Item 2'), findsOneWidget);
+      expect(find.text('Item 3'), findsOneWidget);
+      final siblings = await repository.getChildren(null);
+      expect(siblings.map((node) => node.content), [
+        'Item 2',
+        'Dragged',
+        'Item 3',
+      ]);
+    });
+  }
 
   // H1. 长按后移动约 4dp 仍打开菜单
   testWidgets(

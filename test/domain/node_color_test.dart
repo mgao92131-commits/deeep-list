@@ -19,7 +19,7 @@ void main() {
     });
 
     test('has expected Chinese labels', () {
-      expect(NodeColor.none.label, '无');
+      expect(NodeColor.none.label, '默认');
       expect(NodeColor.gray.label, '灰');
       expect(NodeColor.red.label, '红');
       expect(NodeColor.orange.label, '橙');
@@ -30,8 +30,9 @@ void main() {
     });
 
     test('resolves to specified low-saturation light/dark colors', () {
-      expect(NodeColor.none.resolve(Brightness.light), isNull);
-      expect(NodeColor.none.resolve(Brightness.dark), isNull);
+      // Default: Light #F6F6F7, Dark #242629
+      expect(NodeColor.none.resolve(Brightness.light), const Color(0xFFF6F6F7));
+      expect(NodeColor.none.resolve(Brightness.dark), const Color(0xFF242629));
 
       // Gray: Light #F2F3F5, Dark #2A2D31
       expect(NodeColor.gray.resolve(Brightness.light), const Color(0xFFF2F3F5));

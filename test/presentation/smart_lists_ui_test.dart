@@ -43,9 +43,15 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('入口保持等宽、彩色图标、零数量和 Tooltip，无文字标签', (tester) async {
+    testWidgets('主页 AppBar 居中显示等宽智能入口和轻量分隔线', (tester) async {
+      final semantics = tester.ensureSemantics();
       await pumpApp(tester);
       final bar = find.byType(SmartEntriesBar);
+      expect(
+        find.descendant(of: find.byType(AppBar), matching: bar),
+        findsOneWidget,
+      );
+      expect(find.text('DeepList'), findsNothing);
       expect(
         find.descendant(of: bar, matching: find.text('0')),
         findsNWidgets(3),
@@ -73,6 +79,24 @@ void main() {
       expect(buttons, findsNWidgets(3));
       expect(tester.getSize(buttons.at(0)), tester.getSize(buttons.at(1)));
       expect(tester.getSize(buttons.at(1)), tester.getSize(buttons.at(2)));
+      expect(tester.getSize(buttons.first).height, 48);
+      expect(
+        find.descendant(of: bar, matching: find.byType(VerticalDivider)),
+        findsNWidgets(2),
+      );
+      expect(
+        tester.getCenter(bar).dx,
+        tester.getCenter(find.byType(AppBar)).dx,
+      );
+      expect(
+        tester
+            .getSemantics(
+              find.byKey(const ValueKey('smart-entry-today-button')),
+            )
+            .label,
+        '今天，0',
+      );
+      semantics.dispose();
     });
 
     testWidgets('数量 99 原样显示，100 显示 99+', (tester) async {
@@ -117,7 +141,7 @@ void main() {
       );
 
       // 点击右侧下钻进入子节点页面
-      await tester.tap(find.byTooltip('Open'));
+      await tester.tap(find.text('1'));
       await tester.pumpAndSettle();
 
       // 子节点页面标题为 Parent Node
@@ -143,7 +167,7 @@ void main() {
       // 返回主页
       await tester.tap(find.byTooltip('Back'));
       await tester.pumpAndSettle();
-      expect(find.text('DeepList'), findsOneWidget);
+      expect(find.byType(SmartEntriesBar), findsOneWidget);
 
       // 2. 点击“收藏”
       await tester.tap(find.byKey(const ValueKey('smart-entry-favorites')));
@@ -155,7 +179,7 @@ void main() {
       // 返回主页
       await tester.tap(find.byTooltip('Back'));
       await tester.pumpAndSettle();
-      expect(find.text('DeepList'), findsOneWidget);
+      expect(find.byType(SmartEntriesBar), findsOneWidget);
 
       // 3. 点击“截止日期”
       await tester.tap(find.byKey(const ValueKey('smart-entry-due-dates')));
@@ -167,7 +191,7 @@ void main() {
       // 返回主页
       await tester.tap(find.byTooltip('Back'));
       await tester.pumpAndSettle();
-      expect(find.text('DeepList'), findsOneWidget);
+      expect(find.byType(SmartEntriesBar), findsOneWidget);
     });
 
     testWidgets('NodeRow 收藏节点显示实心星星，未收藏不显示空星，子节点数量仍在最右侧', (tester) async {

@@ -198,7 +198,7 @@ class _NodePageState extends ConsumerState<NodePage> {
       }
     });
 
-    final baseTitle = isRoot ? 'DeepList' : parent?.content ?? '';
+    final baseTitle = parent?.content ?? '';
 
     return PopScope<void>(
       canPop: isNormal,
@@ -209,21 +209,31 @@ class _NodePageState extends ConsumerState<NodePage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          leadingWidth: isRoot ? null : 48,
-          titleSpacing: isRoot ? 16 : 0,
+          centerTitle: isRoot,
+          leadingWidth: 48,
+          titleSpacing: 0,
           leading: isRoot
-              ? null
+              ? const SizedBox(width: 48)
               : IconButton(
                   tooltip: 'Back',
                   icon: const Icon(Icons.arrow_back),
                   onPressed: () => unawaited(_handleBack()),
                 ),
-          title: Text(
-            baseTitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
-          ),
+          title: isRoot
+              ? SmartEntriesBar(
+                  onTodayTap: () => context.push('/today'),
+                  onFavoritesTap: () => context.push('/favorites'),
+                  onDueDatesTap: () => context.push('/due-dates'),
+                )
+              : Text(
+                  baseTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
           actions: [
             if (archivedCount > 0 || archiveView == ArchiveView.archived)
               PopupMenuButton<String>(
@@ -265,7 +275,9 @@ class _NodePageState extends ConsumerState<NodePage> {
                     ];
                   }
                 },
-              ),
+              )
+            else if (isRoot)
+              const SizedBox(width: 48),
           ],
         ),
         body: nodesAsync.when(
@@ -276,9 +288,6 @@ class _NodePageState extends ConsumerState<NodePage> {
                 ? displayItems.findItem(pageState.editingNodeId!)
                 : null;
 
-            final showSmartEntries =
-                isRoot && archiveView == ArchiveView.active;
-
             return Column(
               children: [
                 if (archiveView == ArchiveView.archived)
@@ -287,12 +296,6 @@ class _NodePageState extends ConsumerState<NodePage> {
                     onShowActive: () => ref
                         .read(archiveViewProvider(widget.parentId).notifier)
                         .setView(ArchiveView.active),
-                  ),
-                if (showSmartEntries)
-                  SmartEntriesBar(
-                    onTodayTap: () => context.push('/today'),
-                    onFavoritesTap: () => context.push('/favorites'),
-                    onDueDatesTap: () => context.push('/due-dates'),
                   ),
                 Expanded(
                   child: NodeList(

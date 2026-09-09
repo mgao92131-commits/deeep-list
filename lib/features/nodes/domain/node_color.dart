@@ -13,7 +13,7 @@ enum NodeColor {
   String get label {
     switch (this) {
       case NodeColor.none:
-        return '无';
+        return '默认';
       case NodeColor.gray:
         return '灰';
       case NodeColor.red:
@@ -31,12 +31,11 @@ enum NodeColor {
     }
   }
 
-  Color? resolve(Brightness brightness) {
-    if (this == NodeColor.none) return null;
+  Color resolve(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
     switch (this) {
       case NodeColor.none:
-        return null;
+        return isDark ? const Color(0xFF242629) : const Color(0xFFF6F6F7);
       case NodeColor.gray:
         return isDark ? const Color(0xFF2A2D31) : const Color(0xFFF2F3F5);
       case NodeColor.red:

@@ -89,9 +89,22 @@ void main() {
 
         // Color toolbar elements are visible
         expect(find.byTooltip('返回'), findsOneWidget);
+        expect(find.byTooltip('默认'), findsOneWidget);
+        expect(find.byTooltip('无'), findsNothing);
         for (final color in NodeColor.values) {
           expect(find.byTooltip(color.label), findsOneWidget);
         }
+        final defaultPreview = find.descendant(
+          of: find.byTooltip('默认'),
+          matching: find.byWidgetPredicate((widget) {
+            if (widget is! Container) return false;
+            final decoration = widget.decoration;
+            return decoration is BoxDecoration &&
+                decoration.shape == BoxShape.circle &&
+                decoration.color == const Color(0xFFF6F6F7);
+          }),
+        );
+        expect(defaultPreview, findsOneWidget);
 
         // Tap yellow color
         await tester.tap(find.byTooltip('黄'));

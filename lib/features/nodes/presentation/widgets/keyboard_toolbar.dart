@@ -395,11 +395,6 @@ class _KeyboardToolbarState extends State<KeyboardToolbar> {
     Border border;
     if (isSelected) {
       border = Border.all(color: theme.colorScheme.primary, width: 2.0);
-    } else if (color == NodeColor.none) {
-      border = Border.all(
-        color: isDark ? Colors.white60 : Colors.black45,
-        width: 1.5,
-      );
     } else {
       border = Border.all(
         color: isDark
@@ -426,7 +421,7 @@ class _KeyboardToolbarState extends State<KeyboardToolbar> {
                 height: 22,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: resolvedColor ?? Colors.transparent,
+                  color: resolvedColor,
                   border: border,
                 ),
                 child: isSelected

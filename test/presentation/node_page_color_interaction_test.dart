@@ -7,6 +7,7 @@ import 'package:deep_list/app/app.dart';
 import 'package:deep_list/app/providers.dart';
 import 'package:deep_list/features/nodes/application/tree_command_service.dart';
 import 'package:deep_list/features/nodes/domain/node_color.dart';
+import 'package:deep_list/features/nodes/presentation/widgets/node_row.dart';
 
 import '../helpers/memory_node_repository.dart';
 
@@ -38,6 +39,41 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('默认节点使用浅灰背景，主动灰色保持更深且节点间没有分隔线', (tester) async {
+    final defaultNode = await commands.createNode(
+      parentId: null,
+      content: 'Default Node',
+    );
+    final grayNode = await commands.createNode(
+      parentId: null,
+      content: 'Gray Node',
+    );
+    await commands.updateColor(grayNode.id, NodeColor.gray);
+    await pumpApp(tester);
+
+    Color cardColor(String nodeId) {
+      final containers = tester.widgetList<Container>(
+        find.descendant(
+          of: find.byKey(ValueKey(nodeId)),
+          matching: find.byType(Container),
+        ),
+      );
+      final card = containers.firstWhere((container) {
+        final decoration = container.decoration;
+        return decoration is BoxDecoration &&
+            decoration.borderRadius == BorderRadius.circular(11);
+      });
+      return (card.decoration! as BoxDecoration).color!;
+    }
+
+    expect(cardColor(defaultNode.id), const Color(0xFFF6F6F7));
+    expect(cardColor(grayNode.id), const Color(0xFFF2F3F5));
+    expect(
+      find.descendant(of: find.byType(NodeRow), matching: find.byType(Divider)),
+      findsNothing,
+    );
+  });
 
   testWidgets(
     'Editing flow: color palette entry, focus retention, color update, enter auto-exits color mode',

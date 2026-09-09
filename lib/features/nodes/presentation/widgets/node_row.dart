@@ -307,8 +307,6 @@ class _NodeRowState extends ConsumerState<NodeRow>
     // so text width never jumps or wraps differently across Normal, Editing, and Dragging.
     const rightPadding = 48.0;
 
-    const dividerIndent = 20.0;
-
     return SizedBox(
       width: double.infinity,
       child: GestureDetector(
@@ -332,59 +330,43 @@ class _NodeRowState extends ConsumerState<NodeRow>
             widget.onStartEditing();
           }
         },
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Transform.translate(
-              offset: Offset(_dragOffset, 0),
-              child: Container(
-                width: double.infinity,
-                margin: const EdgeInsets.symmetric(
-                  horizontal: horizontalMargin,
-                  vertical: 2,
-                ),
-                constraints: const BoxConstraints(minHeight: minHeight),
-                decoration: BoxDecoration(
-                  color:
-                      widget.item.node.color.resolve(theme.brightness) ??
-                      Colors.transparent,
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Stack(
-                  alignment: Alignment.centerLeft,
-                  children: [
-                    // Main text content with leading favorite and secondary metadata
-                    Padding(
-                      padding: const EdgeInsets.only(
-                        left: innerLeftPadding,
-                        right: rightPadding,
-                        top: 12,
-                        bottom: 12,
-                      ),
-                      child: _buildRowContent(context, theme, content),
-                    ),
-                    // Permanent 48dp Trailing Slot
-                    Positioned(
-                      right: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: 48,
-                      child: _buildTrailingSlot(theme),
-                    ),
-                  ],
-                ),
-              ),
+        child: Transform.translate(
+          offset: Offset(_dragOffset, 0),
+          child: Container(
+            width: double.infinity,
+            margin: const EdgeInsets.symmetric(
+              horizontal: horizontalMargin,
+              vertical: 2,
             ),
-            // Light divider
-            Divider(
-              height: 1,
-              thickness: 0.8,
-              indent: dividerIndent,
-              endIndent: 0,
-              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+            constraints: const BoxConstraints(minHeight: minHeight),
+            decoration: BoxDecoration(
+              color: widget.item.node.color.resolve(theme.brightness),
+              borderRadius: BorderRadius.circular(11),
             ),
-          ],
+            child: Stack(
+              alignment: Alignment.centerLeft,
+              children: [
+                // Main text content with leading favorite and secondary metadata
+                Padding(
+                  padding: const EdgeInsets.only(
+                    left: innerLeftPadding,
+                    right: rightPadding,
+                    top: 12,
+                    bottom: 12,
+                  ),
+                  child: _buildRowContent(context, theme, content),
+                ),
+                // Permanent 48dp Trailing Slot
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: 48,
+                  child: _buildTrailingSlot(theme),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -515,34 +497,31 @@ class _NodeRowState extends ConsumerState<NodeRow>
   }
 
   Widget _buildTrailingSlot(ThemeData theme) {
-    return Tooltip(
-      message: 'Open',
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => unawaited(widget.onNavigate()),
-        child: SizedBox(
-          width: 48,
-          child: Container(
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 6),
-            child: widget.item.childCount > 0
-                ? Text(
-                    '${widget.item.childCount}',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: theme.colorScheme.onSurfaceVariant.withValues(
-                        alpha: 0.6,
-                      ),
-                    ),
-                  )
-                : Icon(
-                    Icons.chevron_right,
-                    size: 20,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => unawaited(widget.onNavigate()),
+      child: SizedBox(
+        width: 48,
+        child: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 6),
+          child: widget.item.childCount > 0
+              ? Text(
+                  '${widget.item.childCount}',
+                  style: TextStyle(
+                    fontSize: 13,
                     color: theme.colorScheme.onSurfaceVariant.withValues(
-                      alpha: 0.45,
+                      alpha: 0.6,
                     ),
                   ),
-          ),
+                )
+              : Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: theme.colorScheme.onSurfaceVariant.withValues(
+                    alpha: 0.45,
+                  ),
+                ),
         ),
       ),
     );

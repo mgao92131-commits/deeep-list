@@ -25,93 +25,87 @@ class SmartEntriesBar extends ConsumerWidget {
             ?.fold<int>(0, (total, group) => total + group.items.length) ??
         0;
 
-    return Container(
+    return SizedBox(
+      width: 216,
       height: 48,
-      margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.45,
-        ),
-        borderRadius: BorderRadius.circular(12),
-      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: Tooltip(
-              message: '今天',
-              child: InkWell(
-                borderRadius: const BorderRadius.horizontal(
-                  left: Radius.circular(12),
-                ),
-                onTap: onTodayTap,
-                child: Center(
-                  child: _entryContent(
-                    context,
-                    icon: Icons.wb_sunny_outlined,
-                    entry: 'today',
-                    color: const Color(0xFFF59E0B),
-                    count: count(SmartListType.today),
-                  ),
-                ),
-              ),
-            ),
+          _entryButton(
+            context,
+            label: '今天',
+            icon: Icons.wb_sunny_outlined,
+            entry: 'today',
+            color: const Color(0xFFF59E0B),
+            count: count(SmartListType.today),
+            onTap: onTodayTap,
           ),
-          Center(
-            child: Container(
-              width: 1,
-              height: 20,
-              color: theme.dividerColor.withValues(alpha: 0.25),
-            ),
+          _divider(theme, 'today-favorites'),
+          _entryButton(
+            context,
+            label: '收藏',
+            icon: Icons.star,
+            entry: 'favorites',
+            color: const Color(0xFFF59E0B),
+            count: count(SmartListType.favorites),
+            onTap: onFavoritesTap,
           ),
-          Expanded(
-            child: Tooltip(
-              message: '收藏',
-              child: InkWell(
-                onTap: onFavoritesTap,
-                child: Center(
-                  child: _entryContent(
-                    context,
-                    icon: Icons.star,
-                    entry: 'favorites',
-                    color: const Color(0xFFF59E0B),
-                    count: count(SmartListType.favorites),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Center(
-            child: Container(
-              width: 1,
-              height: 20,
-              color: theme.dividerColor.withValues(alpha: 0.25),
-            ),
-          ),
-          Expanded(
-            child: Tooltip(
-              message: '截止日期',
-              child: InkWell(
-                borderRadius: const BorderRadius.horizontal(
-                  right: Radius.circular(12),
-                ),
-                onTap: onDueDatesTap,
-                child: Center(
-                  child: _entryContent(
-                    context,
-                    icon: Icons.event_outlined,
-                    entry: 'due-dates',
-                    color: theme.colorScheme.primary,
-                    count: count(SmartListType.dueDates),
-                  ),
-                ),
-              ),
-            ),
+          _divider(theme, 'favorites-due-dates'),
+          _entryButton(
+            context,
+            label: '截止日期',
+            icon: Icons.event_outlined,
+            entry: 'due-dates',
+            color: theme.colorScheme.primary,
+            count: count(SmartListType.dueDates),
+            onTap: onDueDatesTap,
           ),
         ],
       ),
     );
   }
+
+  Widget _divider(ThemeData theme, String key) => VerticalDivider(
+    key: ValueKey('smart-entry-divider-$key'),
+    width: 1,
+    thickness: 1,
+    indent: 14,
+    endIndent: 14,
+    color: theme.dividerColor.withValues(alpha: 0.25),
+  );
+
+  Widget _entryButton(
+    BuildContext context, {
+    required String label,
+    required IconData icon,
+    required String entry,
+    required Color color,
+    required int count,
+    required VoidCallback onTap,
+  }) => Expanded(
+    child: Semantics(
+      key: ValueKey('smart-entry-$entry-button'),
+      button: true,
+      label: '$label，$count',
+      excludeSemantics: true,
+      child: Tooltip(
+        message: label,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Center(
+            child: _entryContent(
+              context,
+              icon: icon,
+              entry: entry,
+              color: color,
+              count: count,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 
   Widget _entryContent(
     BuildContext context, {

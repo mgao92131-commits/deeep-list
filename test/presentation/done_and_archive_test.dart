@@ -8,6 +8,7 @@ import 'package:deep_list/features/nodes/presentation/controllers/node_page_cont
 import 'package:deep_list/features/nodes/application/tree_command_service.dart';
 import 'package:deep_list/features/nodes/presentation/widgets/keyboard_toolbar.dart';
 import 'package:deep_list/features/nodes/presentation/widgets/node_row.dart';
+import 'package:deep_list/features/nodes/presentation/widgets/smart_entries_bar.dart';
 
 import '../helpers/memory_node_repository.dart';
 
@@ -188,7 +189,8 @@ void main() {
         await pumpApp(tester);
 
         // Default active view
-        expect(find.text('DeepList'), findsOneWidget);
+        expect(find.text('DeepList'), findsNothing);
+        expect(find.byType(SmartEntriesBar), findsOneWidget);
         expect(find.text('Active Item'), findsOneWidget);
         expect(find.text('Archived Item'), findsNothing);
 
@@ -198,9 +200,10 @@ void main() {
         await tester.tap(find.text('查看已归档'));
         await tester.pumpAndSettle();
 
-        // AppBar title remains unchanged; archive state is shown by the bar.
-        expect(find.text('DeepList'), findsOneWidget);
+        // Smart entries remain stable while archive state is shown by the bar.
+        expect(find.text('DeepList'), findsNothing);
         expect(find.text('DeepList · 已归档'), findsNothing);
+        expect(find.byType(SmartEntriesBar), findsOneWidget);
         expect(find.text('已归档 · 1'), findsOneWidget);
         expect(find.text('仅显示已归档节点'), findsNothing);
         final statusBar = find.byKey(const ValueKey('archive-status-bar'));
@@ -219,6 +222,18 @@ void main() {
           find.descendant(of: statusBar, matching: find.byType(Column)),
           findsNothing,
         );
+        expect(tester.getSize(statusBar).height, 54);
+        expect(
+          tester
+              .getSize(
+                find.descendant(
+                  of: statusBar,
+                  matching: find.widgetWithText(TextButton, '未归档'),
+                ),
+              )
+              .height,
+          48,
+        );
 
         // List now displays archived item only
         expect(find.text('Archived Item'), findsOneWidget);
@@ -233,7 +248,8 @@ void main() {
         await tester.tap(find.text('查看未归档'));
         await tester.pumpAndSettle();
 
-        expect(find.text('DeepList'), findsOneWidget);
+        expect(find.text('DeepList'), findsNothing);
+        expect(find.byType(SmartEntriesBar), findsOneWidget);
         expect(find.text('Active Item'), findsOneWidget);
         expect(find.text('Archived Item'), findsNothing);
         expect(find.byKey(const ValueKey('archive-status-bar')), findsNothing);
@@ -261,7 +277,7 @@ void main() {
       await commands.archiveNode(archivedChild.id);
       await pumpApp(tester);
 
-      await tester.tap(find.byTooltip('Open'));
+      await tester.tap(find.byIcon(Icons.chevron_right));
       await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.more_vert));
       await tester.pumpAndSettle();
@@ -337,8 +353,9 @@ void main() {
         await tester.tap(find.text('查看已归档'));
         await tester.pumpAndSettle();
 
-        expect(find.text('DeepList'), findsOneWidget);
+        expect(find.text('DeepList'), findsNothing);
         expect(find.text('DeepList · 已归档'), findsNothing);
+        expect(find.byType(SmartEntriesBar), findsOneWidget);
         expect(find.text('Sole Archived'), findsOneWidget);
 
         // Restore Sole Archived
@@ -348,7 +365,8 @@ void main() {
         await tester.pumpAndSettle();
 
         // Must automatically return to active view
-        expect(find.text('DeepList'), findsOneWidget);
+        expect(find.text('DeepList'), findsNothing);
+        expect(find.byType(SmartEntriesBar), findsOneWidget);
         expect(find.text('Active Node'), findsOneWidget);
         expect(find.text('Sole Archived'), findsOneWidget);
 
