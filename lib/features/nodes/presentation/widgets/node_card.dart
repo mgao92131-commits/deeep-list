@@ -39,6 +39,7 @@ class NodeCard extends StatefulWidget {
 class _NodeCardState extends State<NodeCard> {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
+  final GlobalKey _textFieldKey = GlobalKey();
   bool _atTextStart = false;
 
   @override
@@ -60,6 +61,7 @@ class _NodeCardState extends State<NodeCard> {
       focusNode: _focusNode,
       controller: _controller,
       commit: widget.onCommit,
+      isFocusReady: () => _textFieldKey.currentContext != null,
     );
   }
 
@@ -121,6 +123,7 @@ class _NodeCardState extends State<NodeCard> {
       child: ListTile(
         title: widget.isEditing
             ? TextField(
+                key: _textFieldKey,
                 controller: _controller,
                 focusNode: _focusNode,
                 autofocus: false,

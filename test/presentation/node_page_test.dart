@@ -70,6 +70,7 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
     final field = tester.widget<TextField>(find.byType(TextField));
     expect(field.focusNode!.hasFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
 
     final controller = ProviderScope.containerOf(
       tester.element(find.byType(DeepListApp)),

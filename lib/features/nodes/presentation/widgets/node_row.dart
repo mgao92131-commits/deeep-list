@@ -48,6 +48,7 @@ class _NodeRowState extends ConsumerState<NodeRow>
     with SingleTickerProviderStateMixin {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
+  final GlobalKey _textFieldKey = GlobalKey();
   late final AnimationController _springController;
   Animation<double>? _springAnimation;
 
@@ -86,6 +87,7 @@ class _NodeRowState extends ConsumerState<NodeRow>
       focusNode: _focusNode,
       controller: _controller,
       commit: widget.onCommit,
+      isFocusReady: () => _textFieldKey.currentContext != null,
     );
   }
 
@@ -269,6 +271,7 @@ class _NodeRowState extends ConsumerState<NodeRow>
     Widget content;
     if (widget.isEditing) {
       content = TextField(
+        key: _textFieldKey,
         controller: _controller,
         focusNode: _focusNode,
         autofocus: false,

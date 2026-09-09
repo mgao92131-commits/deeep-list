@@ -9,11 +9,13 @@ class _EditorRegistration {
   final FocusNode focusNode;
   final TextEditingController controller;
   final EditorCommit commit;
+  final bool Function()? isFocusReady;
 
   const _EditorRegistration({
     required this.focusNode,
     required this.controller,
     required this.commit,
+    this.isFocusReady,
   });
 }
 
@@ -64,12 +66,14 @@ class EditorSession {
     required FocusNode focusNode,
     required TextEditingController controller,
     required EditorCommit commit,
+    bool Function()? isFocusReady,
   }) {
     if (_disposed) return;
     _registrations[nodeId] = _EditorRegistration(
       focusNode: focusNode,
       controller: controller,
       commit: commit,
+      isFocusReady: isFocusReady,
     );
     if (_pendingFocusNodeId == nodeId) {
       _schedulePendingFocus();
@@ -145,11 +149,11 @@ class EditorSession {
     suppressBlurCommit(from);
     _pendingFocusNodeId = to;
     _pendingCursor = cursor;
-    final toRegistration = _registrations[to];
-    if (toRegistration != null) {
+    final registration = _registrations[to];
+    if (registration != null && _isEditableMounted(registration)) {
       _pendingFocusNodeId = null;
       _pendingCursor = null;
-      _requestFocusAndVerify(to, toRegistration, cursor, generation);
+      _requestFocusAndVerify(to, registration, cursor, generation);
     } else {
       _schedulePendingFocus();
     }
@@ -202,6 +206,9 @@ class EditorSession {
   ) {
     registration.focusNode.requestFocus();
     _applyCursor(nodeId, cursor);
+    if (registration.focusNode.hasFocus && _handoverTo == nodeId) {
+      _clearHandover();
+    }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_disposed) return;
@@ -218,6 +225,11 @@ class EditorSession {
     });
   }
 
+  bool _isEditableMounted(_EditorRegistration registration) {
+    return registration.isFocusReady?.call() ??
+        registration.focusNode.context != null;
+  }
+
   void _schedulePendingFocus() {
     final generation = _focusGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -228,6 +240,16 @@ class EditorSession {
 
       final registration = _registrations[nodeId];
       if (registration == null) return;
+
+      // A row registers its FocusNode before its editing TextField is built.
+      // Keep the request pending until the matching EditableText is actually
+      // mounted, otherwise the FocusNode can become focused without opening a
+      // platform text-input connection.
+      if (!_isEditableMounted(registration)) {
+        _schedulePendingFocus();
+        WidgetsBinding.instance.scheduleFrame();
+        return;
+      }
 
       final cursor = _pendingCursor;
       _pendingFocusNodeId = null;

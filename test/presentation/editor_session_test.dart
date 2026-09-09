@@ -209,6 +209,53 @@ void main() {
   });
 
   testWidgets(
+    'focus stays pending until the registered EditableText is mounted',
+    (tester) async {
+      final session = EditorSession();
+      final focusNode = FocusNode();
+      final controller = TextEditingController(text: 'mounted later');
+
+      addTearDown(() {
+        session.dispose();
+        focusNode.dispose();
+        controller.dispose();
+      });
+
+      await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: SizedBox.shrink())),
+      );
+
+      session.register(
+        nodeId: 'node',
+        focusNode: focusNode,
+        controller: controller,
+        commit: (_) async {},
+      );
+      session.focus('node');
+
+      await tester.pump();
+
+      expect(session.hasPendingFocus, isTrue);
+      expect(focusNode.hasFocus, isFalse);
+      expect(tester.testTextInput.isVisible, isFalse);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TextField(focusNode: focusNode, controller: controller),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(session.hasPendingFocus, isFalse);
+      expect(focusNode.hasFocus, isTrue);
+      expect(tester.testTextInput.isVisible, isTrue);
+    },
+  );
+
+  testWidgets(
     'Test C: handoverFocus transfers focus and cursor from A to B without session.unfocus',
     (tester) async {
       final session = EditorSession();
