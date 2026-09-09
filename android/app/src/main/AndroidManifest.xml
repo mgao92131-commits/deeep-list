@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="deep_list"
+        android:label="DeepList"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

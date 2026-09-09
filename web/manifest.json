@@ -1,6 +1,6 @@
 {
-    "name": "deep_list",
-    "short_name": "deep_list",
+    "name": "DeepList",
+    "short_name": "DeepList",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
